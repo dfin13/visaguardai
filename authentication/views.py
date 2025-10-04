@@ -45,7 +45,7 @@ def signup_view(request):
                 password=password
             )
             login(request, user)
-            return redirect('index:dashboard')
+            return redirect('dashboard:dashboard')
     return render(request, 'auth/signup.html')
 
 def logout_view(request):
