@@ -1,0 +1,24 @@
+[Unit]
+Description=Gunicorn instance to serve visaguardai
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+RuntimeDirectory=gunicorn
+WorkingDirectory=/var/www/visaguardai
+ExecStart=/var/www/visaguardai/venv/bin/gunicorn --config /var/www/visaguardai/gunicorn.conf.py visaguardai.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Environment=DJANGO_SETTINGS_MODULE=visaguardai.settings
+Environment=PATH=/var/www/visaguardai/venv/bin
+Environment=PYTHONPATH=/var/www/visaguardai
+
+[Install]
+WantedBy=multi-user.target
+

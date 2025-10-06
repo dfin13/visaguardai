@@ -173,7 +173,7 @@
 # if __name__ == "__main__":
 #     EMAIL = "syedawaisalishah46@gmail.com"
 #     PASSWORD = "1093333435aA@"
-#     GEMINI_API_KEY = "AIzaSyAZbGIX4kvCJrUI-XtPX91S23CszugkslA"
+#     GEMINI_API_KEY = "your-gemini-api-key-here"
 
 #     scraper = LinkedInPostAnalyzer(EMAIL, PASSWORD, GEMINI_API_KEY)
 #     results = scraper.analyze_profile("sana-kalam-🇵🇸-576166175")
@@ -186,8 +186,12 @@
 from apify_client import ApifyClient
 
 # Store tokens
-APIFY_API_TOKEN = "apify_api_jThnWxx8hhHutQSZe8hqRjZlIHckIs0kmnqW"
-OPENROUTER_API_KEY = "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"
+import os
+from django.conf import settings
+
+# Get API key from environment variables or Django settings
+APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
 
 # Config dict (optional, if you want to keep both tokens together)
 config = {

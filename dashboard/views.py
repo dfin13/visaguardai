@@ -622,9 +622,9 @@ def dashboard(request):
         elif not config.live and config.STRIPE_PUBLISHABLE_KEY_TEST:
             stripe_publishable_key = config.STRIPE_PUBLISHABLE_KEY_TEST
         else:
-            stripe_publishable_key = 'pk_test_51H...'  # fallback test key or show error
+            stripe_publishable_key = 'pk_test_placeholder'  # fallback test key or show error
     else:
-        stripe_publishable_key = 'pk_test_51H...'  # fallback test key or show error
+        stripe_publishable_key = 'pk_test_placeholder'  # fallback test key or show error
     context = {
         'user': request.user,
         'user_email': request.user.email,

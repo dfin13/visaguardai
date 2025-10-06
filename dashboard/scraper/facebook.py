@@ -1,16 +1,27 @@
 import json
+import os
 from apify_client import ApifyClient
 from openai import OpenAI
 from django.conf import settings
 from dashboard.models import Config
 from dashboard.utils_email import send_api_expiry_alert
-# ==== CONFIG ====
-config = Config.objects.first()
-if config:
-    APIFY_API_TOKEN = config.Apify_api_key
-    OPENROUTER_API_KEY = config.openrouter_api_key
-else:
-    pass
+
+# Get API keys from environment variables or Django settings
+APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
+
+# Fallback to database config if environment variables not set
+if not APIFY_API_TOKEN or not OPENROUTER_API_KEY:
+    config = Config.objects.first()
+    if config:
+        APIFY_API_TOKEN = config.Apify_api_key
+        OPENROUTER_API_KEY = config.openrouter_api_key
+
+# Ensure we have API keys
+if not APIFY_API_TOKEN:
+    raise ValueError("APIFY_API_KEY not found in environment variables or database config")
+if not OPENROUTER_API_KEY:
+    raise ValueError("OPENROUTER_API_KEY not found in environment variables or database config")
 
 # ==== Initialize OpenRouter Client ====
 client_ai = OpenAI(
@@ -69,8 +80,11 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
             if post_text:
                 posts.append(post_text)
 
-        if not posts:
-            raise Exception('No posts found')
+        # Check if account is accessible
+        from .account_checker import check_scraping_result
+        is_accessible, result = check_scraping_result(posts, "Facebook", username_or_url)
+        if not is_accessible:
+            return result
     except Exception as e:
         print(f"Scraping failed: {e}")
         error_str = str(e).lower()
@@ -80,14 +94,13 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
                 body=f"Apify API error: {e}",
                 to_email="syedawaisalishah46@gmail.com"
             )
-        # Fallback: generate realistic Facebook posts
-        posts = [
-            "Had an amazing family BBQ this weekend. Grateful for good food and even better company!",
-            "Excited to share my latest blog post on productivity hacks. Let me know your thoughts!",
-            "Throwback to last year's vacation in the mountains. Can't wait to travel again!",
-            "Just finished reading an inspiring book on leadership. Highly recommend it to everyone.",
-            "Celebrating 10 years at my company today. Thankful for the journey and the team!"
-        ]
+        
+        # Return proper inaccessible account response instead of fabricating posts
+        from .account_checker import create_inaccessible_account_response, is_account_private_error
+        if is_account_private_error(str(e)):
+            return create_inaccessible_account_response("Facebook", username_or_url, "is private or inaccessible")
+        else:
+            return create_inaccessible_account_response("Facebook", username_or_url, "could not be accessed")
 
     if user_id:
         cache.set(f'analysis_stage_{user_id}', 'comment_scanning', timeout=60*60)

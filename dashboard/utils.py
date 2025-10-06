@@ -3,8 +3,12 @@ import json
 import google.generativeai as genai
 
 # ==== CONFIG ====
-APIFY_API_KEY = "apify_api_D8JEJL2NUvNoOCZw2poebc9gsJ7dMn2o3YmY"
-GEMINI_API_KEY = "AIzaSyAZbGIX4kvCJrUI-XtPX91S23CszugkslA"
+import os
+from django.conf import settings
+
+# Get API keys from environment variables or Django settings
+APIFY_API_KEY = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or getattr(settings, 'GEMINI_API_KEY', None)
 PLATFORM = "Instagram"
 INSTAGRAM_USERNAME = "natgeo"  # Change to desired username
 
@@ -167,7 +171,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
             from openai import OpenAI
             from dashboard.models import Config
             config = Config.objects.first()
-            OPENROUTER_API_KEY = config.openrouter_api_key if config else "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"
+            OPENROUTER_API_KEY = config.openrouter_api_key if config else os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
             client_ai = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
             prompt = f"""
 You are an AI-based content recommendation engine for paid users.
@@ -238,7 +242,7 @@ Rules:
             from openai import OpenAI
             from dashboard.models import Config
             config = Config.objects.first()
-            OPENROUTER_API_KEY = config.openrouter_api_key if config else "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"
+            OPENROUTER_API_KEY = config.openrouter_api_key if config else os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
             client_ai = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
             prompt = f"""
 You are an AI-based content recommendation engine for paid users.

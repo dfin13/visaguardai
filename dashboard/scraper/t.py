@@ -1,4 +1,5 @@
 # twitter_analyzer.py
+import os
 from apify_client import ApifyClient
 from openai import OpenAI
 import json
@@ -7,15 +8,23 @@ import time
 from django.conf import settings
 from dashboard.models import Config
 from dashboard.utils_email import send_api_expiry_alert
-# ==== CONFIG ====
-config = Config.objects.first()
 
+# Get API keys from environment variables or Django settings
+APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
 
-if config:
-     APIFY_API_TOKEN = config.Apify_api_key
-     OPENROUTER_API_KEY = config.openrouter_api_key
-else:
-    pass
+# Fallback to database config if environment variables not set
+if not APIFY_API_TOKEN or not OPENROUTER_API_KEY:
+    config = Config.objects.first()
+    if config:
+        APIFY_API_TOKEN = config.Apify_api_key
+        OPENROUTER_API_KEY = config.openrouter_api_key
+
+# Ensure we have API keys
+if not APIFY_API_TOKEN:
+    raise ValueError("APIFY_API_KEY not found in environment variables or database config")
+if not OPENROUTER_API_KEY:
+    raise ValueError("OPENROUTER_API_KEY not found in environment variables or database config")
 
 # ==== Initialize Clients ====
 apify_client = ApifyClient(APIFY_API_TOKEN)
@@ -24,65 +33,17 @@ client_ai = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-def generate_fallback_tweets(username):
-    """Generate realistic fallback tweets using AI when API fails"""
-    try:
-        prompt = f"""Generate 5 realistic Twitter tweets for a professional user named {username}. 
-        The tweets should be professional, engaging, and appropriate for Twitter.
-        Include variety: career updates, tech insights, personal achievements, industry thoughts, and networking.
-        Each tweet should be 1-2 sentences, under 280 characters, and include relevant hashtags.
-        Return as a JSON array with this exact structure:
-        [
-            {{"tweet": "tweet content here"}},
-            {{"tweet": "tweet content here"}},
-            ...
-        ]"""
-        
-        response = client_ai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-        )
-        
-        ai_tweets_text = response.choices[0].message.content
-        
-        # Extract JSON from response
-        try:
-            ai_tweets = json.loads(ai_tweets_text)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            json_match = re.search(r'```(?:json)?\n([\s\S]+?)\n```', ai_tweets_text)
-            if json_match:
-                ai_tweets = json.loads(json_match.group(1))
-            else:
-                raise Exception("Could not parse AI response")
-        
-        # Convert AI response to expected format
-        if isinstance(ai_tweets, list) and len(ai_tweets) > 0:
-            tweets = []
-            for tweet_data in ai_tweets[:5]:  # Limit to 5 tweets
-                if isinstance(tweet_data, dict) and "tweet" in tweet_data:
-                    tweets.append({"tweet": tweet_data["tweet"]})
-            
-            if tweets:
-                return tweets
-    
-    except Exception as e:
-        print(f"AI tweet generation failed: {e}")
-    
-    # Fallback to hardcoded tweets if AI fails
-    return [
-        {"tweet": f"Excited to announce that I have started a new position as Software Engineer at TechCorp! Looking forward to this new chapter in my career. #career #newbeginnings #softwareengineering"},
-        {"tweet": "Just attended an amazing AI & Machine Learning conference. So many inspiring talks and great networking opportunities! The future of tech is bright. #AI #MachineLearning #TechConference"},
-        {"tweet": "Working on an exciting new project that combines data science and user experience design. Love when different disciplines come together! #DataScience #UX #Innovation"},
-        {"tweet": "Grateful for my incredible team and all the support they've given me on this challenging project. Collaboration really does make all the difference! #Teamwork #Gratitude"},
-        {"tweet": "Just published a new blog post about the importance of clean code and best practices in software development. Check it out and let me know your thoughts! #CleanCode #SoftwareDevelopment #BestPractices"}
-    ]
+# REMOVED: generate_fallback_tweets function
+# This function was creating fake tweets when scraping failed.
+# Instead, we now return proper "inaccessible account" responses.
 
 def analyze_twitter_profile(username: str, tweets_desired: int = 5):
+    """
+    Analyze Twitter profile.
+    Returns proper response for inaccessible accounts instead of fabricating content.
+    """
+    from .account_checker import check_scraping_result, create_inaccessible_account_response, is_account_private_error
+    
     print(f"Starting Twitter analysis for {username}")
     
     # === APIFY ACTOR CONFIG ===
@@ -118,11 +79,17 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 5):
             if tweet_text:
                 tweets.append({"tweet": tweet_text})
         
-        if not tweets:
-            raise Exception('No tweets found')
+        # Check if account is accessible
+        is_accessible, result = check_scraping_result(tweets, "Twitter", username)
+        if not is_accessible:
+            return result
+            
     except TypeError as e:
         print(f"Error calling Apify task: {e}")
-        tweets = generate_fallback_tweets(username)
+        if is_account_private_error(str(e)):
+            return create_inaccessible_account_response("Twitter", username, "is private or inaccessible")
+        else:
+            return create_inaccessible_account_response("Twitter", username, "could not be accessed")
     except Exception as e:
         print(f"Error during Twitter analysis: {str(e)}")
         error_str = str(e).lower()
@@ -132,7 +99,11 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 5):
                 body=f"Twitter Apify API error: {e}",
                 to_email="syedawaisalishah46@gmail.com"
             )
-        tweets = generate_fallback_tweets(username)
+        
+        if is_account_private_error(str(e)):
+            return create_inaccessible_account_response("Twitter", username, "is private or inaccessible")
+        else:
+            return create_inaccessible_account_response("Twitter", username, "could not be accessed")
 
     tweets_json = json.dumps(tweets, ensure_ascii=False)
 

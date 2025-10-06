@@ -1,17 +1,27 @@
 import json
 import re
+import os
 from apify_client import ApifyClient
 from openai import OpenAI
-
-# === API KEYS ===
+from django.conf import settings
 from dashboard.models import Config
-config = Config.objects.first()
-if config:
-    APIFY_API_TOKEN = config.Apify_api_key
-    OPENROUTER_API_KEY = config.openrouter_api_key
-else:
-    APIFY_API_TOKEN = "apify_api_jThnWxx8hhHutQSZe8hqRjZlIHckIs0kmnqW"
-    OPENROUTER_API_KEY = "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"
+
+# Get API keys from environment variables or Django settings
+APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
+
+# Fallback to database config if environment variables not set
+if not APIFY_API_TOKEN or not OPENROUTER_API_KEY:
+    config = Config.objects.first()
+    if config:
+        APIFY_API_TOKEN = config.Apify_api_key
+        OPENROUTER_API_KEY = config.openrouter_api_key
+
+# Ensure we have API keys
+if not APIFY_API_TOKEN:
+    raise ValueError("APIFY_API_KEY not found in environment variables or database config")
+if not OPENROUTER_API_KEY:
+    raise ValueError("OPENROUTER_API_KEY not found in environment variables or database config")
 
 # === CLIENTS ===
 apify_client = ApifyClient(APIFY_API_TOKEN)
@@ -37,16 +47,14 @@ def extract_json_from_ai_response(text):
                 pass
         return {"error": "Invalid JSON", "raw_output": text}
 
-# --- Fallback LinkedIn posts ---
-def generate_fallback_linkedin_posts(username):
-    return [
-        {"post_text": "Excited to announce that I have started a new position as Software Engineer! #career"},
-        {"post_text": "Had a great time attending the AI & ML Summit 2025. Inspiring talks and networking! #AI #MachineLearning"},
-        {"post_text": "Grateful for the amazing team for making this project a success. #teamwork"}
-    ]
+# REMOVED: generate_fallback_linkedin_posts function
+# This function was creating fake LinkedIn posts when scraping failed.
+# Instead, we now return proper "inaccessible account" responses.
 
 # --- Scraper ---
 def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=5):
+    from .account_checker import create_inaccessible_account_response, is_account_private_error, check_scraping_result
+    
     run_input = {"username": username, "page_number": page_number, "limit": limit}
     try:
         print(f"Starting LinkedIn scraping for: {username}")
@@ -56,7 +64,12 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=5):
     except Exception as e:
         print(f"Apify error: {e}")
         send_api_expiry_alert("VisaGuardAI: Apify API Expiry/Failure Alert", f"LinkedIn Apify API error: {e}", "syedawaisalishah46@gmail.com")
-        return generate_fallback_linkedin_posts(username)
+        
+        # Return proper inaccessible account response instead of fabricating posts
+        if is_account_private_error(str(e)):
+            return None, create_inaccessible_account_response("LinkedIn", username, "is private or inaccessible")
+        else:
+            return None, create_inaccessible_account_response("LinkedIn", username, "could not be accessed")
 
     posts = []
     for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
@@ -68,7 +81,14 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=5):
             posts.append({"post_text": post_text})
         if len(posts) >= limit:
             break
-    return posts
+    
+    # Check if account is accessible
+    post_texts = [post["post_text"] for post in posts]
+    is_accessible, result = check_scraping_result(post_texts, "LinkedIn", username)
+    if not is_accessible:
+        return None, result
+    
+    return posts, None
 
 # --- AI Analyzer ---
 def analyze_posts_with_ai(posts):
@@ -116,9 +136,16 @@ def analyze_posts_with_ai(posts):
 
 # --- Main workflow ---
 def analyze_linkedin_profile(username, limit=5):
-    posts = get_linkedin_posts(username, limit=limit)
+    posts, inaccessible_response = get_linkedin_posts(username, limit=limit)
+    
+    # If account is inaccessible, return the proper response
+    if inaccessible_response:
+        return inaccessible_response
+    
     if not posts:
-        posts = generate_fallback_linkedin_posts(username)
+        from .account_checker import create_inaccessible_account_response
+        return create_inaccessible_account_response("LinkedIn", username, "has no accessible content")
+    
     analysis = analyze_posts_with_ai(posts)
     return {"linkedin": analysis}
 

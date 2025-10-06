@@ -8,7 +8,15 @@ def get_linkedin_posts(username=None):
         username (str): Optional LinkedIn username to filter posts
     """
     # Initialize the ApifyClient with your API token
-    client = ApifyClient("apify_api_NDeIB7HUn3ZHOFuXLoQzlx7AZscr3u4Eu29r")
+    import os
+    from django.conf import settings
+    
+    # Get API key from environment variables or Django settings
+    apify_token = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
+    if not apify_token:
+        raise ValueError("APIFY_API_KEY not found in environment variables or database config")
+    
+    client = ApifyClient(apify_token)
 
     # Prepare Actor input
     actor_input = {
