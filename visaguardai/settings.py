@@ -240,11 +240,13 @@ SITE_ID = 1
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Session cookies configuration for OAuth
+SESSION_COOKIE_DOMAIN = '.visaguardai.com'
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
 # CSRF cookies configuration
+CSRF_COOKIE_DOMAIN = '.visaguardai.com'
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
