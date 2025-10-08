@@ -104,10 +104,23 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# SQLite configuration (backup - kept for rollback)
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
+# PostgreSQL configuration
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'visaguard_db',
+        'USER': 'visaguard_user',
+        'PASSWORD': 'secureStrongPassword123!',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
@@ -222,6 +235,22 @@ ALERT_GMAIL_PASSWORD = EMAIL_HOST_PASSWORD
 
 # Django Allauth Configuration
 SITE_ID = 1
+
+# Security settings for HTTPS proxy (Nginx)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Session cookies configuration for OAuth
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# CSRF cookies configuration
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Allauth-specific settings for OAuth
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
