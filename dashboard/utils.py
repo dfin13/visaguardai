@@ -145,11 +145,25 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         else:
             results['instagram'] = []
     except Exception as e:
-        print(f"Instagram analysis failed: {e}")
-        results['instagram'] = [
-            {"post": "Sample Instagram post 1. This is fallback content.", "analysis": {"Instagram": {"content_reinforcement": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "content_suppression": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "content_flag": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "risk_score": 0}}}
-        ]
-        print(f"DEBUG: Instagram fallback dummy data set: {results['instagram']}")
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ Instagram analysis FAILED: {e}")
+        print(f"Full error trace:\n{error_details}")
+        # Return error state instead of fake "safe" data
+        results['instagram'] = [{
+            "error": True,
+            "message": f"Instagram analysis failed: {str(e)}",
+            "post": f"⚠️ Unable to analyze Instagram account @{instagram_username}",
+            "analysis": {
+                "Instagram": {
+                    "content_reinforcement": {"status": "error", "recommendation": "Please try again", "reason": f"API error: {str(e)}"},
+                    "content_suppression": {"status": "error", "recommendation": None, "reason": "Analysis unavailable"},
+                    "content_flag": {"status": "error", "recommendation": None, "reason": "Analysis unavailable"},
+                    "risk_score": -1
+                }
+            }
+        }]
+        print(f"DEBUG: Instagram error state set (not fake safe data)")
     cache.set(f'instagram_analysis_{user_id}', results['instagram'], 3600)
 
     # LinkedIn - Skip since it's already processed in the main thread

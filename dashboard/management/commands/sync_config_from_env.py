@@ -27,12 +27,26 @@ class Command(BaseCommand):
         if created:
             self.stdout.write(self.style.SUCCESS(f'✅ Created new Config entry'))
         else:
-            # Update existing config with env vars
-            config.Apify_api_key = os.getenv('APIFY_API_KEY', config.Apify_api_key)
-            config.Gemini_api_key = os.getenv('GEMINI_API_KEY', config.Gemini_api_key)
-            config.openrouter_api_key = os.getenv('OPENROUTER_API_KEY', config.openrouter_api_key)
-            config.STRIPE_SECRET_KEY_TEST = os.getenv('STRIPE_SECRET_KEY_TEST', config.STRIPE_SECRET_KEY_TEST)
-            config.STRIPE_PUBLISHABLE_KEY_TEST = os.getenv('STRIPE_PUBLISHABLE_KEY_TEST', config.STRIPE_PUBLISHABLE_KEY_TEST)
+            # Update existing config with env vars (skip if value is placeholder)
+            apify_key = os.getenv('APIFY_API_KEY')
+            if apify_key and 'placeholder' not in apify_key.lower():
+                config.Apify_api_key = apify_key
+            
+            gemini_key = os.getenv('GEMINI_API_KEY')
+            if gemini_key and 'placeholder' not in gemini_key.lower():
+                config.Gemini_api_key = gemini_key
+            
+            openrouter_key = os.getenv('OPENROUTER_API_KEY')
+            if openrouter_key and 'your_' not in openrouter_key and openrouter_key.startswith('sk-or-v1-'):
+                config.openrouter_api_key = openrouter_key
+            
+            stripe_test_secret = os.getenv('STRIPE_SECRET_KEY_TEST')
+            if stripe_test_secret and stripe_test_secret.startswith('sk_test_'):
+                config.STRIPE_SECRET_KEY_TEST = stripe_test_secret
+            
+            stripe_test_pub = os.getenv('STRIPE_PUBLISHABLE_KEY_TEST')
+            if stripe_test_pub and stripe_test_pub.startswith('pk_test_'):
+                config.STRIPE_PUBLISHABLE_KEY_TEST = stripe_test_pub
             
             # Only update live keys if they're not placeholders in env
             stripe_live_secret = os.getenv('STRIPE_SECRET_KEY_LIVE')
