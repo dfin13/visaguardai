@@ -55,15 +55,23 @@ def extract_json_from_ai_response(text):
 def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
     """
     Scrape LinkedIn posts with optimized settings.
-    Reduced limit to 3 posts (from 5) for 40% faster processing.
+    Fetches ONLY the latest 2-3 posts for the specific username.
     LinkedIn scraping is inherently slower due to anti-scraping measures.
     """
     from .account_checker import create_inaccessible_account_response, is_account_private_error, check_scraping_result
     
-    run_input = {"username": username, "page_number": page_number, "limit": limit}
+    # Configure scraper to fetch only latest posts for specific user profile
+    run_input = {
+        "username": username,
+        "page_number": page_number,
+        "limit": limit,  # Hard limit: fetch only 2-3 posts
+        "profileUrl": f"https://www.linkedin.com/in/{username}/"  # Target specific profile
+    }
+    
     try:
         print(f"⏱️  Starting LinkedIn scraping for: {username} (limit: {limit} posts)")
-        print(f"   Note: LinkedIn scraping is slower due to platform restrictions")
+        print(f"   Profile URL: https://www.linkedin.com/in/{username}/")
+        print(f"   Mode: Latest posts only (no feed scanning)")
         
         # Add timeout to fail fast if actor hangs (max 60 seconds)
         run = apify_client.actor("LQQIXN9Othf8f7R5n").call(
@@ -83,15 +91,27 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
             return None, create_inaccessible_account_response("LinkedIn", username, "could not be accessed")
 
     posts = []
+    post_count = 0
+    
+    # Iterate through dataset and collect ONLY captions (post text)
     for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
+        # Extract only the caption/text content
         post_text = (
             item.get("text") or item.get("post_text") or item.get("content") or
             item.get("description") or item.get("post_content")
         )
+        
         if post_text:
             posts.append({"post_text": post_text})
-        if len(posts) >= limit:
+            post_count += 1
+            print(f"   ✓ Collected post {post_count}/{limit}")
+        
+        # Hard stop at limit to prevent excessive scanning
+        if post_count >= limit:
+            print(f"   ✅ Reached limit of {limit} posts - stopping iteration")
             break
+    
+    print(f"   📊 Total posts collected: {len(posts)}")
     
     # Check if account is accessible
     post_texts = [post["post_text"] for post in posts]
