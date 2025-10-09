@@ -888,7 +888,11 @@ def result_view(request):
 @login_required
 def export_pdf_view(request):
     from django.core.cache import cache
+    from datetime import datetime
+    
     user_id = request.user.id
+    user_profile = request.user.userprofile
+    
     def get_or_set_analysis(platform):
         session_key = f'{platform}_analysis'
         analysis = request.session.get(session_key)
@@ -898,19 +902,42 @@ def export_pdf_view(request):
             if analysis is not None:
                 request.session[session_key] = analysis
         return analysis
+    
     twitter_analysis = get_or_set_analysis('twitter')
     instagram_analysis = get_or_set_analysis('instagram')
     linkedin_analysis = get_or_set_analysis('linkedin')
     facebook_analysis = get_or_set_analysis('facebook')
+    
+    # Calculate overall risk score
+    total_risk = 0
+    platform_count = 0
+    
+    if instagram_analysis:
+        platform_count += 1
+    if linkedin_analysis:
+        platform_count += 1
+    if twitter_analysis:
+        platform_count += 1
+    if facebook_analysis:
+        platform_count += 1
+    
     context = {
+        'user': request.user,
+        'report_date': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+        'instagram_username': user_profile.instagram or 'Not connected',
+        'linkedin_username': user_profile.linkedin or 'Not connected',
+        'twitter_username': user_profile.twitter or 'Not connected',
+        'facebook_username': user_profile.facebook or 'Not connected',
         'twitter_analyses': twitter_analysis,
         'instagram_analysis': instagram_analysis,
         'linkedin_analysis': linkedin_analysis,
         'facebook_analysis': facebook_analysis,
+        'platform_count': platform_count,
     }
-    html_string = render_to_string('dashboard/result.html', context)
+    
+    html_string = render_to_string('dashboard/pdf_report.html', context)
     response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = 'attachment; filename="dashboard_results.pdf"'
+    response['Content-Disposition'] = f'attachment; filename="VisaGuardAI_Report_{request.user.username}_{datetime.now().strftime("%Y%m%d")}.pdf"'
     pisa_status = pisa.CreatePDF(
         html_string, dest=response
     )
