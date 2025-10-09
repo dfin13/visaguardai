@@ -183,7 +183,7 @@ Posts:
 """
 
     # ==== AI CALL ====
-    print(f"🤖 Sending {len(posts)} posts to OpenRouter AI for analysis...")
+    print(f"🤖 Sending {len(posts_data)} posts to OpenRouter AI for analysis...")
     try:
         completion = client_ai.chat.completions.create(
             model="gpt-4o-mini",
@@ -210,10 +210,10 @@ Posts:
             results = json.loads(ai_response)
         except Exception as je:
             print(f"JSON parsing failed: {je}\nRaw AI response: {ai_response}")
-            results = [{"Instagram": {"error": "AI parsing failed", "raw": ai_response}} for _ in posts]
+            results = [{"Instagram": {"error": "AI parsing failed", "raw": ai_response}} for _ in posts_data]
     except Exception as e:
         print(f"AI analysis failed: {e}")
-        results = [{"Instagram": {"error": "AI call failed", "raw": str(e)}} for _ in posts]
+        results = [{"Instagram": {"error": "AI call failed", "raw": str(e)}} for _ in posts_data]
 
     # ==== Final output with full post data ====
     final = []
