@@ -51,7 +51,7 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         fb_url = f"https://www.facebook.com/{username_or_url}"
 
     if user_id:
-        # Blueprint scanning removed - using simplified progress stages
+        cache.set(f'analysis_stage_{user_id}', 'blueprint_scanning', timeout=60*60)
         cache.set(f'stage_progress_{user_id}', 5, timeout=60*60)
 
     # ==== SCRAPE FACEBOOK POSTS ====
@@ -103,7 +103,7 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
             return create_inaccessible_account_response("Facebook", username_or_url, "could not be accessed")
 
     if user_id:
-        # Comment scanning removed - using simplified progress stages
+        cache.set(f'analysis_stage_{user_id}', 'comment_scanning', timeout=60*60)
         cache.set(f'stage_progress_{user_id}', 15, timeout=60*60)
 
     # ==== Create single prompt ====
@@ -127,24 +127,40 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
     try:
         results = analyze_posts_batch("Facebook", posts_data)
         print(f"✅ Facebook intelligent analysis complete: {len(results)} posts")
-        ai_response = json.dumps(results, ensure_ascii=False)
+        
+        # Return in same format as LinkedIn/Instagram: {"facebook": [...]}
+        return {"facebook": results}
+        
     except Exception as e:
         import traceback
         print(f"❌ Facebook intelligent analysis failed: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         
-        # Handle error as rate limit for consistency
-        return {"error": f"Facebook analysis temporarily unavailable: {str(e)[:100]}"}
-
-    try:
-        results = json.loads(ai_response)
-    except json.JSONDecodeError:
-        results = {"error": "Invalid JSON from AI", "raw_output": ai_response}
-
-    return [
-        {"post": posts[i], "analysis": results[i] if isinstance(results, list) and i < len(results) else results}
-        for i in range(len(posts))
-    ]
+        # Return error in consistent format
+        return {"facebook": [{
+            "post": "Facebook analysis error",
+            "post_data": {"data_unavailable": True, "error": str(e)},
+            "analysis": {
+                "Facebook": {
+                    "content_reinforcement": {
+                        "status": "error",
+                        "reason": f"Analysis unavailable: {str(e)[:80]}",
+                        "recommendation": "Try again later"
+                    },
+                    "content_suppression": {
+                        "status": "error",
+                        "reason": "Unable to assess content",
+                        "recommendation": None
+                    },
+                    "content_flag": {
+                        "status": "error",
+                        "reason": "No data available",
+                        "recommendation": None
+                    },
+                    "risk_score": -1
+                }
+            }
+        }]}
 
 
 # # Example usage:
