@@ -355,44 +355,10 @@ def start_analysis(request):
                 linkedin_result = analyze_linkedin_profile(linkedin_username, limit=5)
                 cache.set(f'linkedin_analysis_{request.user.id}', linkedin_result, timeout=60*60)
             except Exception as e:
-                print(f"LinkedIn analysis failed in views: {e}")
-                # Generate fallback data when LinkedIn analysis completely fails
-                from .scraper.linkedin import generate_fallback_linkedin_posts
-                fallback_posts = generate_fallback_linkedin_posts(linkedin_username)
-                
-                # Return structured error (no fake safe data)
-                fallback_results = []
-                for post in fallback_posts:
-                    fallback_results.append({
-                        "post": post["post_text"],
-                        "post_data": {
-                            "caption": post["post_text"],
-                            "data_unavailable": True,
-                            "error": "Analysis service unavailable",
-                            "error_type": "analysis_failed"
-                        },
-                        "analysis": {
-                            "content_reinforcement": {
-                                "status": "error",
-                                "recommendation": "Try again later or contact support",
-                                "reason": "Analysis service unavailable - unable to assess content"
-                            },
-                            "content_suppression": {
-                                "status": "error",
-                                "recommendation": None,
-                                "reason": "Data unavailable for risk assessment"
-                            },
-                            "content_flag": {
-                                "status": "error",
-                                "recommendation": None,
-                                "reason": "Unable to flag content without analysis data"
-                            },
-                            "risk_score": -1
-                        }
-                    })
-                
-                fallback_data = {"linkedin": fallback_results}
-                cache.set(f'linkedin_analysis_{request.user.id}', fallback_data, timeout=60*60)
+                print(f"❌ LinkedIn analysis failed: {e}")
+                print(f"LinkedIn fallback skipped — no dummy data generation used.")
+                # LinkedIn analysis failed; user will see no LinkedIn results
+                # Real scraping/analysis is the only path; no fallback data generated
         # -----------------------------------------------------------------------------
 
         # Update progress before starting background processing
