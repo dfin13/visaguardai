@@ -24,6 +24,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('core.urls')),  # Include the core app's URLs
     path('auth/', include(('authentication.urls', 'auth'), namespace='auth')),
+    path('accounts/', include('allauth.urls')),  # Include allauth URLs
     path('dashboard/', include(('dashboard.urls', 'dashboard'), namespace='dashboard')),
 ]
 

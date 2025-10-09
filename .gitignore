@@ -147,3 +147,9 @@ storage/
 cookies.json
 cookies_browser.json
 linkedin_analysis_*.json
+
+# PostgreSQL backups and logs
+backups/
+logs/
+oauth_config_*.json
+visaguard_db_backup_*.sql*
