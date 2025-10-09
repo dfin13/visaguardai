@@ -109,8 +109,13 @@ def analyze_instagram_posts(username, limit=5):
                 posts_text_only.append(caption)
         
         print(f"✅ Scraped {len(posts_data)} Instagram posts")
+        
+        # Sort posts chronologically (most recent first)
+        posts_data.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+        print(f"📅 Sorted posts chronologically (most recent first)")
+        
         if posts_data:
-            print(f"   First post: ID={posts_data[0]['post_id']}, Type={posts_data[0]['type']}, Timestamp={posts_data[0]['created_at']}")
+            print(f"   Most recent post: ID={posts_data[0]['post_id']}, Type={posts_data[0]['type']}, Timestamp={posts_data[0]['created_at']}")
         
         # Check if account is accessible
         is_accessible, result = check_scraping_result(posts_text_only, "Instagram", username)

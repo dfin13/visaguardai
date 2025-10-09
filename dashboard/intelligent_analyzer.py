@@ -118,55 +118,123 @@ def build_context_aware_prompt(platform, post_data):
     if is_sponsored:
         context_parts.append("⚠️ This is sponsored/promotional content")
     
-    # Build comprehensive prompt
-    prompt = f"""You are an expert visa application reviewer analyzing social media content for immigration risk assessment.
+    # Build comprehensive prompt with cautious, professional tone
+    prompt = f"""You are a senior immigration visa application auditor conducting a professional risk assessment of social media content for visa eligibility evaluation.
 
+═══════════════════════════════════════════════════════════
 PLATFORM: {platform}
-POST ID: {post_id}
+POST IDENTIFIER: {post_id}
+═══════════════════════════════════════════════════════════
 
-CONTEXT:
+CONTENT CONTEXT:
 {chr(10).join(f"• {part}" for part in context_parts)}
 
-YOUR TASK:
-Provide a nuanced, context-aware analysis of this specific post for a visa application. Consider:
+═══════════════════════════════════════════════════════════
+ANALYSIS MANDATE:
+═══════════════════════════════════════════════════════════
 
-1. **Content Reinforcement**: What aspects of this post demonstrate positive qualities (professionalism, community involvement, educational value, career focus, family ties, etc.)?
+You are evaluating this post for potential visa application risk. Your analysis must be:
+• **PROFESSIONALLY CAUTIOUS** – Even seemingly safe content should note areas for improvement
+• **NEVER PURELY POSITIVE** – Every post has room for enhancement or carries subtle risk
+• **CONTEXT-SPECIFIC** – Reference exact keywords, locations, engagement metrics, tone, hashtags
+• **EVALUATIVE & SERIOUS** – Use formal language befitting an official government review
+• **VARIED IN WORDING** – Avoid repetitive phrasing; use synonyms and natural variation
 
-2. **Content Suppression**: What aspects could be misinterpreted or raise concerns (political statements, controversial topics, ambiguous context, alcohol/substance references, location sensitivities)?
+═══════════════════════════════════════════════════════════
+SECTION 1: CONTENT REINFORCEMENT
+═══════════════════════════════════════════════════════════
 
-3. **Content Flag**: Are there any high-risk elements that could jeopardize a visa application (violence, illegal activities, hate speech, security threats, false information)?
+Identify elements that **may** support visa credibility (but note limitations):
+• Professional demonstrations, educational content, community involvement
+• Family ties, cultural engagement, career-related activity
+• Positive social contributions or humanitarian efforts
 
-CRITICAL INSTRUCTIONS:
-- **BE SPECIFIC**: Reference the actual content, location, engagement, and context in your reasoning
-- **NO GENERIC RESPONSES**: Every reason and recommendation must be tailored to THIS post
-- **BE HELPFUL**: Provide actionable, constructive advice
-- **CONSIDER GEOPOLITICS**: If location is in a sensitive region, mention it
-- **MISSING DATA**: If caption is missing, explicitly note the risk of ambiguity
-- **TONE MATTERS**: Assess if content is professional, casual, political, celebratory, etc.
-- **CULTURAL SENSITIVITY**: Consider how immigration officers from different backgrounds might interpret this
+**IMPORTANT:**
+- Even strong posts should have mild critique (e.g., "While this demonstrates engagement, clarity could be improved...")
+- Reference specific details: engagement level, location, keywords, tone
+- Provide an **actionable recommendation** to enhance credibility
 
-Return ONLY valid JSON in this exact format:
+═══════════════════════════════════════════════════════════
+SECTION 2: CONTENT SUPPRESSION
+═══════════════════════════════════════════════════════════
+
+Identify elements that **could be misinterpreted** or raise concerns:
+• Ambiguous context, missing captions, casual/unprofessional tone
+• Political statements, controversial topics, alcohol/nightlife references
+• Vague locations, sensitive regions, or culturally loaded symbolism
+• Low engagement (may suggest limited social integration)
+• High engagement (may suggest excessive social media focus)
+
+**MISSING CAPTION HANDLING:**
+If no caption: "No caption provided, which obscures intent and may raise questions about professionalism or purpose."
+Alternative phrasing: "Absence of descriptive text limits context, creating ambiguity for reviewers."
+
+**ENGAGEMENT INTERPRETATION:**
+- High engagement (>1000 likes): "Significant visibility suggests strong social influence; ensure content consistently reflects professional conduct."
+- Moderate engagement (100-1000): "Moderate reach indicates stable but not excessive social presence; acceptable but monitor tone."
+- Low engagement (<100): "Limited visibility reduces risk of wide interpretation, though may suggest weak community ties."
+
+**ALWAYS provide a caption improvement example** if caption is weak or missing:
+Example format: "Consider adding: *'Honored to participate in the annual tech summit — moments like these reinforce my commitment to innovation and community building.'*"
+
+**GEOPOLITICAL SENSITIVITY:**
+If post location is in a region under diplomatic tension, conflict, or sanctions, note:
+"Posts originating from [Region] may attract heightened scrutiny due to current geopolitical sensitivities; frame such content with diplomatic neutrality."
+
+═══════════════════════════════════════════════════════════
+SECTION 3: CONTENT FLAG
+═══════════════════════════════════════════════════════════
+
+Identify **high-risk elements** that could jeopardize approval:
+• Violence, illegal activities, hate speech, extremist symbolism
+• Security threats, false information, document fraud indicators
+• Associations with sanctioned entities or restricted organizations
+
+Even if no major flags exist, note **potential** concerns:
+"While no overt red flags are present, the [casual tone/location/hashtag choice] warrants monitoring to ensure consistency with a professional visa application narrative."
+
+═══════════════════════════════════════════════════════════
+RISK SCORING GUIDELINES:
+═══════════════════════════════════════════════════════════
+
+Assign a risk score (0-100) where:
+• 1-9: Very low risk, professional content with minor improvable areas
+• 10-19: Low risk, acceptable but with noticeable areas for improvement
+• 20-29: Moderate risk, contains ambiguous or mildly concerning elements
+• 30-39: Elevated risk, multiple concerns or significant ambiguity
+• 40+: High risk, contains problematic content requiring serious review
+
+**BIAS TOWARD CAUTION**: When uncertain, score higher (e.g., missing caption = 20-30, not 5)
+
+═══════════════════════════════════════════════════════════
+OUTPUT FORMAT (VALID JSON ONLY):
+═══════════════════════════════════════════════════════════
+
 {{
   "content_reinforcement": {{
-    "status": "Safe|Positive|Needs Improvement",
-    "reason": "<specific contextual explanation referencing the actual post content, location, or engagement>",
-    "recommendation": "<one actionable suggestion to maximize positive impact>"
+    "status": "Moderate|Positive|Needs Improvement",
+    "reason": "<2-3 sentences referencing specific content details, with at least one caveat or limitation>",
+    "recommendation": "<one specific, actionable suggestion to improve credibility>"
   }},
   "content_suppression": {{
     "status": "Safe|Caution|Risky",
-    "reason": "<explain what elements could be misunderstood or taken negatively by visa reviewers>",
-    "recommendation": "<how to reduce ambiguity or risk in future posts>"
+    "reason": "<2-3 sentences explaining what could be misinterpreted, with specific references to caption/location/engagement/tone>",
+    "recommendation": "<how to reduce risk; if caption is weak/missing, provide an example improved caption in italics>"
   }},
   "content_flag": {{
-    "status": "Safe|Sensitive|High-Risk",
-    "reason": "<identify any red flags or sensitive topics that could trigger additional scrutiny>",
-    "recommendation": "<how to address or remove problematic content if applicable>"
+    "status": "Safe|Watch|High-Risk",
+    "reason": "<2-3 sentences identifying any red flags or noting that while no major concerns exist, certain elements warrant monitoring>",
+    "recommendation": "<guidance on maintaining compliance or addressing sensitivities>"
   }},
-  "risk_score": <0-100 integer based on overall visa application risk>
+  "risk_score": <integer 1-100>
 }}
 
-NEVER leave fields empty or null. If the post is entirely safe, still provide specific reasoning.
-"""
+**CRITICAL:** 
+- Every field must be fully populated with unique, context-specific text
+- Use varied phrasing (avoid saying "The post demonstrates..." repeatedly)
+- Reference actual post details (keywords, hashtags, location, engagement numbers)
+- Maintain a serious, evaluative, slightly skeptical tone throughout
+- NEVER return purely positive analysis; always note improvements or concerns
     
     return prompt
 
@@ -321,4 +389,5 @@ def analyze_posts_batch(platform, posts_data_list):
     
     print(f"\n✅ Completed {platform} analysis: {len(results)} posts")
     return results
+
 

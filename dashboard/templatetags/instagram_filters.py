@@ -1,6 +1,7 @@
 import json
 import re
 from django import template
+from dashboard.grading_system import risk_score_to_letter_grade, format_grade_display
 
 register = template.Library()
 
@@ -96,3 +97,26 @@ def remove_json_comments(value):
     if not isinstance(value, str):
         return value
     return re.sub(r'//.*', '', value)
+
+@register.filter(name='to_letter_grade')
+def to_letter_grade(score):
+    """Convert risk score to letter grade info."""
+    if score is None or score < 0:
+        return {
+            'grade': 'N/A',
+            'descriptor': 'Unknown',
+            'color': 'gray',
+            'emoji': '⚪',
+            'tailwind_color': 'text-gray-500',
+            'bg_color': 'bg-gray-900/20',
+            'border_color': 'border-gray-500/30',
+            'numeric_score': -1
+        }
+    return risk_score_to_letter_grade(score)
+
+@register.filter(name='format_grade')
+def format_grade(score):
+    """Format grade display."""
+    if score is None or score < 0:
+        return "N/A (Unknown) ⚪"
+    return format_grade_display(score)
