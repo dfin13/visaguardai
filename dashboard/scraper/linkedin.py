@@ -66,7 +66,7 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
         print(f"   Note: LinkedIn scraping is slower due to platform restrictions")
         
         # Add timeout to fail fast if actor hangs (max 60 seconds)
-        run = apify_client.actor("curious_coder/linkedin-post-search-scraper").call(
+        run = apify_client.actor("LQQIXN9Othf8f7R5n").call(
             run_input=run_input,
             timeout_secs=60  # Fail fast if it takes too long
         )
