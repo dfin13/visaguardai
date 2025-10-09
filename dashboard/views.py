@@ -224,18 +224,6 @@ def check_analysis_progress(request):
                 status = 'facebook_analysis'
                 message = 'Facebook analysis in progress...'
                 progress = 40 + stage_progress
-            elif current_stage == 'blueprint_scanning':
-                status = 'blueprint_scanning'
-                message = 'Blueprint scanning...'
-                progress = 55 + stage_progress
-            elif current_stage == 'post_scanning':
-                status = 'post_scanning'
-                message = 'Post scanning...'
-                progress = 70 + stage_progress
-            elif current_stage == 'comment_scanning':
-                status = 'comment_scanning'
-                message = 'Comment scanning...'
-                progress = 85 + stage_progress
             elif instagram_done and linkedin_done and twitter_done and not facebook_done:
                 status = 'facebook_processing'
                 message = 'Analyzing Facebook posts...'
@@ -253,6 +241,9 @@ def check_analysis_progress(request):
                 message = 'Analyzing Instagram posts...'
                 progress = 25
 
+        # Cap progress at 100%
+        progress = min(progress, 100)
+        
         return JsonResponse({
             'status': status,
             'message': message,
@@ -264,7 +255,15 @@ def check_analysis_progress(request):
             'facebook_done': facebook_done
         })
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error in check_analysis_progress: {e}")
+        print(f"Traceback: {error_trace}")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Error checking progress: {str(e)}',
+            'progress': 0
+        }, status=500)
 
 import threading
 

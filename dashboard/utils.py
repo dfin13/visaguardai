@@ -127,7 +127,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
             time.sleep(2)  # 2 second delay to show progress
             
             # Blueprint scanning stage
-            cache.set(f'analysis_stage_{user_id}', 'blueprint_scanning', timeout=60*60)
+            # Blueprint scanning stage removed - using simplified progress stages
             cache.set(f'stage_progress_{user_id}', 55, timeout=60*60)
             time.sleep(3)  # 3 second delay to show progress
             
@@ -137,7 +137,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
             time.sleep(3)  # 3 second delay to show progress
             
             # Comment scanning stage
-            cache.set(f'analysis_stage_{user_id}', 'comment_scanning', timeout=60*60)
+            # Comment scanning stage removed - using simplified progress stages
             cache.set(f'stage_progress_{user_id}', 85, timeout=60*60)
             time.sleep(2)  # 2 second delay to show progress
             

@@ -51,7 +51,7 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         fb_url = f"https://www.facebook.com/{username_or_url}"
 
     if user_id:
-        cache.set(f'analysis_stage_{user_id}', 'blueprint_scanning', timeout=60*60)
+        # Blueprint scanning removed - using simplified progress stages
         cache.set(f'stage_progress_{user_id}', 5, timeout=60*60)
 
     # ==== SCRAPE FACEBOOK POSTS ====
@@ -103,7 +103,7 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
             return create_inaccessible_account_response("Facebook", username_or_url, "could not be accessed")
 
     if user_id:
-        cache.set(f'analysis_stage_{user_id}', 'comment_scanning', timeout=60*60)
+        # Comment scanning removed - using simplified progress stages
         cache.set(f'stage_progress_{user_id}', 15, timeout=60*60)
 
     # ==== Create single prompt ====

@@ -512,15 +512,31 @@ class Dashboard {
                     'Content-Type': 'application/json'
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 console.log('Progress:', data);
+                
+                // Cap progress at 100%
+                const progress = Math.min(data.progress || 0, 100);
                 
                 if (loadingMessage) {
                     loadingMessage.textContent = data.message || 'Processing...';
                 }
                 if (progressBar) {
-                    progressBar.style.width = data.progress + '%';
+                    progressBar.style.width = progress + '%';
+                }
+                
+                // Check for error status
+                if (data.status === 'error') {
+                    console.error('❌ Analysis error:', data.message);
+                    this.hideLoadingModal();
+                    showMessage(data.message || 'Analysis failed. Please try again.', 'error');
+                    return; // Stop polling
                 }
                 
                 if (data.status === 'complete') {
@@ -535,8 +551,9 @@ class Dashboard {
                 }
             })
             .catch(err => {
-                console.error('Error checking progress:', err);
-                setTimeout(checkProgress, 3000); // Retry after 3 seconds
+                console.error('❌ Error checking progress:', err);
+                this.hideLoadingModal();
+                showMessage('Error checking analysis progress. Please try again.', 'error');
             });
         };
         
