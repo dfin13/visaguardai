@@ -825,11 +825,22 @@ def result_view(request):
     print(twitter_analysis)
 
     instagram_analysis = get_or_set_analysis('instagram')
-    print(instagram_analysis)
     print('DEBUG: instagram_analysis from session:', request.session.get('instagram_analysis'))
     from django.core.cache import cache as debug_cache
     print('DEBUG: instagram_analysis from cache:', debug_cache.get(f'instagram_analysis_{user_id}'))
     print('DEBUG: instagram_analysis final value:', instagram_analysis)
+    
+    # Log first result for verification
+    if instagram_analysis and len(instagram_analysis) > 0:
+        first_item = instagram_analysis[0]
+        print(f"\n{'='*80}")
+        print(f"📊 INSTAGRAM FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
+        print(f"{'='*80}")
+        if 'analysis' in first_item and 'Instagram' in first_item['analysis']:
+            analysis_preview = json.dumps(first_item['analysis']['Instagram'], indent=2)[:200]
+            print(f"{analysis_preview}...")
+        print(f"{'='*80}\n")
+    
     if instagram_analysis is None:
         instagram_analysis = []
 
