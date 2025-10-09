@@ -54,13 +54,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.sites',
-    
-    # Third party apps
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
     
     # Local apps
     'core',
@@ -76,7 +69,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'visaguardai.urls'
@@ -104,23 +96,10 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# SQLite configuration (backup - kept for rollback)
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
-# PostgreSQL configuration
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'visaguard_db',
-        'USER': 'visaguard_user',
-        'PASSWORD': 'secureStrongPassword123!',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -182,9 +161,6 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 APIFY_API_KEY = os.getenv('APIFY_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
-# Google OAuth
-GOOGLE_OAUTH2_CLIENT_ID = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
-GOOGLE_OAUTH2_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH2_CLIENT_SECRET')
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -233,74 +209,3 @@ ALERT_GMAIL_PASSWORD = EMAIL_HOST_PASSWORD
 
 # At the end of urls.py
 
-# Django Allauth Configuration
-SITE_ID = 1
-
-# Security settings for HTTPS proxy (Nginx)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# Session cookies configuration for OAuth
-SESSION_COOKIE_DOMAIN = '.visaguardai.com'
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
-
-# CSRF cookies configuration
-CSRF_COOKIE_DOMAIN = '.visaguardai.com'
-CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SAMESITE = 'Lax'
-
-# Allauth-specific settings for OAuth
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
-
-# Authentication backends
-AUTHENTICATION_BACKENDS = [
-    'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
-]
-
-# Allauth settings
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = 'none'
-ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = False
-ACCOUNT_LOGIN_ON_GET = True
-ACCOUNT_LOGOUT_ON_GET = True
-ACCOUNT_LOGOUT_REDIRECT_URL = '/auth/login/'
-LOGIN_REDIRECT_URL = '/dashboard/'
-
-# Social account settings
-SOCIALACCOUNT_EMAIL_REQUIRED = True
-SOCIALACCOUNT_QUERY_EMAIL = True
-SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'
-SOCIALACCOUNT_STORE_TOKENS = True
-SOCIALACCOUNT_AUTO_SIGNUP = True
-SOCIALACCOUNT_LOGIN_ON_GET = True
-
-# Custom adapter for account linking
-SOCIALACCOUNT_ADAPTER = 'dashboard.adapters.CustomSocialAccountAdapter'
-
-# Google OAuth settings (development)
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        },
-        'OAUTH_PKCE_ENABLED': True,
-    }
-}
-
-# Content Security Policy settings for Google OAuth
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://accounts.google.com", "https://ssl.gstatic.com")
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://accounts.google.com", "https://ssl.gstatic.com")
-CSP_IMG_SRC = ("'self'", "data:", "https:", "https://ssl.gstatic.com")
-CSP_CONNECT_SRC = ("'self'", "https://accounts.google.com")
-CSP_FRAME_SRC = ("'self'", "https://accounts.google.com")
