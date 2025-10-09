@@ -1081,6 +1081,9 @@ def setting_view(request):
 @login_required
 def payment_view(request):
     config = Config.objects.first()
+    if not config:
+        return JsonResponse({'error': 'System configuration not found. Please contact administrator.'}, status=500)
+    
     stripe.api_key = config.STRIPE_SECRET_KEY_LIVE if config.live else config.STRIPE_SECRET_KEY_TEST
     if request.method == 'POST':
         try:
