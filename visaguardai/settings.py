@@ -257,17 +257,28 @@ AUTHENTICATION_BACKENDS = [
 # Allauth settings
 ACCOUNT_LOGIN_METHODS = {'email', 'username'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
-ACCOUNT_EMAIL_VERIFICATION = 'none'  # Disable email verification for development
+ACCOUNT_EMAIL_VERIFICATION = 'none'  # Disable email verification
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = True
 ACCOUNT_LOGIN_ON_GET = True
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_LOGOUT_REDIRECT_URL = '/auth/login/'
-LOGIN_REDIRECT_URL = '/dashboard/'
+ACCOUNT_SIGNUP_REDIRECT_URL = '/dashboard/'  # After signup
+LOGIN_REDIRECT_URL = '/dashboard/'  # After login
+ACCOUNT_AUTHENTICATION_METHOD = 'email'  # Login with email
+ACCOUNT_UNIQUE_EMAIL = True  # Ensure unique emails
 
 # Social account settings
-SOCIALACCOUNT_EMAIL_REQUIRED = True
-SOCIALACCOUNT_QUERY_EMAIL = True
-SOCIALACCOUNT_LOGIN_ON_GET = True
-SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_EMAIL_REQUIRED = True  # Require email from OAuth provider
+SOCIALACCOUNT_QUERY_EMAIL = True  # Query email if not provided
+SOCIALACCOUNT_LOGIN_ON_GET = True  # Allow login via GET (OAuth callback)
+SOCIALACCOUNT_AUTO_SIGNUP = True  # Auto create account for new OAuth users
+SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'  # Skip email verification for OAuth
+SOCIALACCOUNT_STORE_TOKENS = True  # Store OAuth tokens
+
+# Custom adapters for OAuth and account handling
+ACCOUNT_ADAPTER = 'dashboard.adapters.CustomAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'dashboard.adapters.CustomSocialAccountAdapter'
 
 # Google OAuth settings (development)
 SOCIALACCOUNT_PROVIDERS = {
