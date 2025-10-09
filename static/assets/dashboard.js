@@ -464,7 +464,7 @@ class Dashboard {
         .then(data => {
             if (data.success) {
                 this.showLoadingModal();
-                this.runAnalysisSimulation();
+                this.runRealAnalysis(); // Changed from runAnalysisSimulation to runRealAnalysis
             } else {
                 showMessage('Could not reset payment status. Please try again.', 'error');
             }
@@ -474,6 +474,75 @@ class Dashboard {
         });
     }
     
+    runRealAnalysis() {
+        // Start real analysis by calling backend
+        fetch('/dashboard/start-analysis/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('✅ Analysis started successfully');
+                // Poll for progress
+                this.pollAnalysisProgress();
+            } else {
+                this.hideLoadingModal();
+                showMessage(data.error || 'Failed to start analysis', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('❌ Error starting analysis:', err);
+            this.hideLoadingModal();
+            showMessage('Error starting analysis. Please try again.', 'error');
+        });
+    }
+
+    pollAnalysisProgress() {
+        const progressBar = document.getElementById('progress-bar');
+        const loadingMessage = document.getElementById('loading-message');
+        
+        const checkProgress = () => {
+            fetch('/dashboard/analysis-progress/', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Progress:', data);
+                
+                if (loadingMessage) {
+                    loadingMessage.textContent = data.message || 'Processing...';
+                }
+                if (progressBar) {
+                    progressBar.style.width = data.progress + '%';
+                }
+                
+                if (data.status === 'complete') {
+                    // Analysis complete
+                    console.log('✅ Analysis complete!');
+                    this.hideLoadingModal();
+                    // Reload page to show results
+                    window.location.href = '/dashboard/?analysis_complete=1';
+                } else {
+                    // Continue polling
+                    setTimeout(checkProgress, 2000); // Check every 2 seconds
+                }
+            })
+            .catch(err => {
+                console.error('Error checking progress:', err);
+                setTimeout(checkProgress, 3000); // Retry after 3 seconds
+            });
+        };
+        
+        checkProgress();
+    }
+
     showLoadingModal() {
         const modal = document.getElementById('loading-overlay');
         if (modal) {

@@ -281,6 +281,12 @@ def process_analysis_async(user_id, instagram_username, linkedin_username, twitt
 @csrf_exempt
 @require_http_methods(["POST"])
 def start_analysis(request):
+    print(f"\n{'='*80}")
+    print(f"🚀 START_ANALYSIS REQUEST RECEIVED")
+    print(f"   User: {request.user.username if request.user.is_authenticated else 'Anonymous'}")
+    print(f"   Method: {request.method}")
+    print(f"{'='*80}\n")
+    
     # Check authentication first and return JSON error if not authenticated
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
