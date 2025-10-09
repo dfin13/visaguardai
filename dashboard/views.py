@@ -813,7 +813,22 @@ def result_view(request):
         instagram_analysis = []
 
     linkedin_analysis = get_or_set_analysis('linkedin')
-    print(linkedin_analysis)
+    print('DEBUG: linkedin_analysis from session:', request.session.get('linkedin_analysis'))
+    print('DEBUG: linkedin_analysis final value:', linkedin_analysis)
+    
+    # Log first result for verification
+    if linkedin_analysis and isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
+        posts = linkedin_analysis['linkedin']
+        if len(posts) > 0:
+            first_item = posts[0]
+            print(f"\n{'='*80}")
+            print(f"📊 LINKEDIN FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
+            print(f"{'='*80}")
+            if 'analysis' in first_item and 'LinkedIn' in first_item['analysis']:
+                analysis_preview = json.dumps(first_item['analysis']['LinkedIn'], indent=2)[:200]
+                print(f"{analysis_preview}...")
+            print(f"{'='*80}\n")
+    
     if linkedin_analysis is None:
         linkedin_analysis = []
 
