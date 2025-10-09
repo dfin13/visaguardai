@@ -224,6 +224,18 @@ def check_analysis_progress(request):
                 status = 'facebook_analysis'
                 message = 'Facebook analysis in progress...'
                 progress = 40 + stage_progress
+            elif current_stage == 'blueprint_scanning':
+                status = 'blueprint_scanning'
+                message = 'Blueprint scanning...'
+                progress = 55 + stage_progress
+            elif current_stage == 'post_scanning':
+                status = 'post_scanning'
+                message = 'Post scanning...'
+                progress = 70 + stage_progress
+            elif current_stage == 'comment_scanning':
+                status = 'comment_scanning'
+                message = 'Comment scanning...'
+                progress = 85 + stage_progress
             elif instagram_done and linkedin_done and twitter_done and not facebook_done:
                 status = 'facebook_processing'
                 message = 'Analyzing Facebook posts...'
@@ -241,9 +253,6 @@ def check_analysis_progress(request):
                 message = 'Analyzing Instagram posts...'
                 progress = 25
 
-        # Cap progress at 100%
-        progress = min(progress, 100)
-        
         return JsonResponse({
             'status': status,
             'message': message,
@@ -255,15 +264,7 @@ def check_analysis_progress(request):
             'facebook_done': facebook_done
         })
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ Error in check_analysis_progress: {e}")
-        print(f"Traceback: {error_trace}")
-        return JsonResponse({
-            'status': 'error',
-            'message': f'Error checking progress: {str(e)}',
-            'progress': 0
-        }, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
 import threading
 
@@ -351,13 +352,48 @@ def start_analysis(request):
                 cache.set(f'analysis_stage_{request.user.id}', 'linkedin_processing', timeout=60*60)
                 cache.set(f'stage_progress_{request.user.id}', 10, timeout=60*60)
                 
-                linkedin_result = analyze_linkedin_profile(linkedin_username, limit=5)
+                # Reduced to 3 posts for 40% faster processing (LinkedIn scraping is inherently slow)
+                linkedin_result = analyze_linkedin_profile(linkedin_username, limit=3)
                 cache.set(f'linkedin_analysis_{request.user.id}', linkedin_result, timeout=60*60)
             except Exception as e:
-                print(f"❌ LinkedIn analysis failed: {e}")
-                print(f"LinkedIn fallback skipped — no dummy data generation used.")
-                # LinkedIn analysis failed; user will see no LinkedIn results
-                # Real scraping/analysis is the only path; no fallback data generated
+                print(f"LinkedIn analysis failed in views: {e}")
+                # Generate fallback data when LinkedIn analysis completely fails
+                from .scraper.linkedin import generate_fallback_linkedin_posts
+                fallback_posts = generate_fallback_linkedin_posts(linkedin_username)
+                
+                # Return structured error (no fake safe data)
+                fallback_results = []
+                for post in fallback_posts:
+                    fallback_results.append({
+                        "post": post["post_text"],
+                        "post_data": {
+                            "caption": post["post_text"],
+                            "data_unavailable": True,
+                            "error": "Analysis service unavailable",
+                            "error_type": "analysis_failed"
+                        },
+                        "analysis": {
+                            "content_reinforcement": {
+                                "status": "error",
+                                "recommendation": "Try again later or contact support",
+                                "reason": "Analysis service unavailable - unable to assess content"
+                            },
+                            "content_suppression": {
+                                "status": "error",
+                                "recommendation": None,
+                                "reason": "Data unavailable for risk assessment"
+                            },
+                            "content_flag": {
+                                "status": "error",
+                                "recommendation": None,
+                                "reason": "Unable to flag content without analysis data"
+                            },
+                            "risk_score": -1
+                        }
+                    })
+                
+                fallback_data = {"linkedin": fallback_results}
+                cache.set(f'linkedin_analysis_{request.user.id}', fallback_data, timeout=60*60)
         # -----------------------------------------------------------------------------
 
         # Update progress before starting background processing

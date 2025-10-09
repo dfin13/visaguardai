@@ -52,13 +52,24 @@ def extract_json_from_ai_response(text):
 # Instead, we now return proper "inaccessible account" responses.
 
 # --- Scraper ---
-def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=5):
+def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
+    """
+    Scrape LinkedIn posts with optimized settings.
+    Reduced limit to 3 posts (from 5) for 40% faster processing.
+    LinkedIn scraping is inherently slower due to anti-scraping measures.
+    """
     from .account_checker import create_inaccessible_account_response, is_account_private_error, check_scraping_result
     
     run_input = {"username": username, "page_number": page_number, "limit": limit}
     try:
-        print(f"Starting LinkedIn scraping for: {username}")
-        run = apify_client.actor("LQQIXN9Othf8f7R5n").call(run_input=run_input)
+        print(f"⏱️  Starting LinkedIn scraping for: {username} (limit: {limit} posts)")
+        print(f"   Note: LinkedIn scraping is slower due to platform restrictions")
+        
+        # Add timeout to fail fast if actor hangs (max 60 seconds)
+        run = apify_client.actor("LQQIXN9Othf8f7R5n").call(
+            run_input=run_input,
+            timeout_secs=60  # Fail fast if it takes too long
+        )
         if not run or "defaultDatasetId" not in run:
             raise Exception("No dataset from actor")
     except Exception as e:
@@ -159,7 +170,11 @@ def analyze_posts_with_ai(posts):
         } for post in posts]
 
 # --- Main workflow ---
-def analyze_linkedin_profile(username, limit=5):
+def analyze_linkedin_profile(username, limit=3):
+    """
+    Analyze LinkedIn profile with optimized post limit.
+    Default reduced to 3 posts (from 5) for faster processing.
+    """
     posts, inaccessible_response = get_linkedin_posts(username, limit=limit)
     
     # If account is inaccessible, return the proper response
