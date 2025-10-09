@@ -44,7 +44,7 @@ Authentication:
 
 OAuth Configuration:
   • Provider: Google
-  • Client ID: 1095815216076-2dorkvubbmhanjpi5cad3ndas6m0bo98...
+  • Client ID: [REDACTED - from Google Cloud Console]
   • Client Secret: *************** (secured)
   • Redirect URI: http://127.0.0.1:8000/accounts/google/login/callback/
   • Status: ✅ HEALTHY

@@ -78,8 +78,8 @@ DATABASES = {
 
 **Real Credentials Installed:**
 ```
-Client ID: 1095815216076-2dorkvubbmhanjpi5cad3ndas6m0bo98.apps.googleusercontent.com
-Client Secret: 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
+Client ID: [REDACTED - Get from Google Cloud Console]
+Client Secret: [REDACTED - Get from Google Cloud Console]
 Provider: google
 Status: ✅ ACTIVE
 ```
@@ -92,7 +92,7 @@ Status: ✅ ACTIVE
 **Database Verification:**
 ```sql
 SELECT provider, name, client_id FROM socialaccount_socialapp;
--- Result: google | Google OAuth | 1095815216076-2dorkv...
+-- Result: google | Google OAuth | [REDACTED]
 ```
 
 **Authorized Redirect URIs (Google Cloud Console):**
@@ -167,7 +167,7 @@ Features:
 ./check_oauth_health.sh
 # ✅ OAuth Status: HEALTHY
 # ✅ Provider: google
-# ✅ Client ID: 1095815216076-2dorkv...
+# ✅ Client ID: [REDACTED]
 ```
 
 **Recommended Cron Jobs:**
