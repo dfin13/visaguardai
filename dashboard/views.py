@@ -375,7 +375,7 @@ def start_analysis(request):
         thread.daemon = True
         thread.start()
             
-        return JsonResponse({'success': True, 'message': 'Analysis started'})
+        return JsonResponse({'success': True, 'message': 'Analysis started successfully'})
         
     except UserProfile.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'User profile not found.'})
