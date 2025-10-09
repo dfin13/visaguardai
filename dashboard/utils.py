@@ -107,8 +107,9 @@ def analyze_instagram_post(username):
 
 def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitter_username, facebook_username=None):
     """
-    Analyze all platforms, always returning a result (real or dummy) for each.
-    If any step fails, fallback to dummy data and keep going.
+    Analyze all platforms using intelligent context-aware AI analysis.
+    Returns real analysis results or error states (never dummy/fake data).
+    Each platform uses the intelligent_analyzer for unique, content-based assessments.
     """
     from .scraper.instagram import analyze_instagram_posts
     from .scraper.linkedin import analyze_linkedin_profile
@@ -179,66 +180,39 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         else:
             results['twitter'] = []
     except Exception as e:
-        print(f"Twitter analysis failed: {e}")
-        # Use OpenRouter to generate fake posts with the user's prompt
-        try:
-            from openai import OpenAI
-            from dashboard.models import Config
-            config = Config.objects.first()
-            OPENROUTER_API_KEY = config.openrouter_api_key if config else os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
-            client_ai = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-            prompt = f"""
-You are an AI-based content recommendation engine for paid users.
-generate fake posts and return a JSON array where each element corresponds to one tweet.
-
-Rules:
-1. Content Reinforcement: If safe, positive, low-risk → encourage similar content.
-2. Content Suppression: If political → suggest avoiding such topics.
-3. Content Flag: If culturally sensitive or controversial → recommend removing it.
-4. Output must be valid JSON ONLY with the following structure for EACH tweet:
-
-[
-  {{
-    \"Twitter\": {{
-      \"content_reinforcement\": {{
-        \"status\": \"safe|caution|warning\",
-        \"recommendation\": \"string or null\",
-        \"reason\": \"string\"
-      }},
-      \"content_suppression\": {{
-        \"status\": \"safe|caution|warning\",
-        \"recommendation\": \"string or null\",
-        \"reason\": \"string\"
-      }},
-      \"content_flag\": {{
-        \"status\": \"safe|caution|warning\",
-        \"recommendation\": \"string or null\",
-        \"reason\": \"string\"
-      }},
-      \"risk_score\": 0
-    }}
-  }},
-  ...
-]
-"""
-            response = client_ai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
-            )
-            ai_response = response.choices[0].message.content
-            import json
-            try:
-                results['twitter'] = json.loads(ai_response)
-            except json.JSONDecodeError:
-                results['twitter'] = [{"post": "AI did not return valid JSON.", "analysis": ai_response}]
-        except Exception as ai_e:
-            print(f"AI fallback for Twitter dummy data failed: {ai_e}")
-            results['twitter'] = [
-                {"post": "Sample Tweet 1. This is fallback content.", "analysis": {"Twitter": {"content_reinforcement": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "content_suppression": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "content_flag": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "risk_score": 0}}}
-            ]
-            print(f"DEBUG: Twitter fallback dummy data set: {results['twitter']}")
-            print(f"DEBUG: Twitter data before caching: {results['twitter']}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Twitter analysis failed: {e}")
+        print(f"Full traceback:\n{error_trace}")
+        # Return proper error state (no fake data)
+        results['twitter'] = [{
+            "tweet": f"⚠️ Unable to analyze Twitter account @{twitter_username}",
+            "post_data": {
+                "caption": None,
+                "data_unavailable": True,
+                "error": str(e),
+                "error_type": "analysis_failed"
+            },
+            "Twitter": {
+                "content_reinforcement": {
+                    "status": "error",
+                    "reason": f"Twitter analysis unavailable: {str(e)[:100]}",
+                    "recommendation": "Try again later or check if account is accessible"
+                },
+                "content_suppression": {
+                    "status": "error",
+                    "reason": "No data available for assessment",
+                    "recommendation": None
+                },
+                "content_flag": {
+                    "status": "error",
+                    "reason": "Unable to flag content without data",
+                    "recommendation": None
+                },
+                "risk_score": -1
+            }
+        }]
+        print(f"DEBUG: Twitter error state set (no fake data)")
     cache.set(f'twitter_analysis_{user_id}', results['twitter'], 3600)
 
     # Facebook
@@ -250,70 +224,40 @@ Rules:
         else:
             results['facebook'] = []
     except Exception as e:
-        print(f"Facebook analysis failed: {e}")
-        # Use OpenRouter to generate fake posts with an AI prompt
-        try:
-            from openai import OpenAI
-            from dashboard.models import Config
-            config = Config.objects.first()
-            OPENROUTER_API_KEY = config.openrouter_api_key if config else os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
-            client_ai = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-            prompt = f"""
-You are an AI-based content recommendation engine for paid users.
-generate fake posts and return a JSON array where each element corresponds to one Facebook post.
-
-Rules:
-1. Content Reinforcement: If safe, positive, low-risk → encourage similar content.
-2. Content Suppression: If political → suggest avoiding such topics.
-3. Content Flag: If culturally sensitive or controversial → recommend removing it.
-4. Output must be valid JSON ONLY with the following structure for EACH post:
-
-[
-  {{
-    \"Facebook\": {{
-      \"content_reinforcement\": {{
-        \"status\": \"safe|caution|warning\",
-        \"recommendation\": \"string or null\",
-        \"reason\": \"string\"
-      }},
-      \"content_suppression\": {{
-        \"status\": \"safe|caution|warning\",
-        \"recommendation\": \"string or null\",
-        \"reason\": \"string\"
-      }},
-      \"content_flag\": {{
-        \"status\": \"safe|caution|warning\",
-        \"recommendation\": \"string or null\",
-        \"reason\": \"string\"
-      }},
-      \"risk_score\": 0
-    }}
-  }},
-  ...
-]
-"""
-            response = client_ai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
-            )
-            ai_response = response.choices[0].message.content
-            import json
-            try:
-                results['facebook'] = json.loads(ai_response)
-                print(f"DEBUG: Facebook fallback AI analysis result: {results['facebook']}")
-                print(f"DEBUG: Facebook data before caching: {results['facebook']}")
-            except json.JSONDecodeError:
-                results['facebook'] = [{"post": "AI did not return valid JSON.", "analysis": ai_response}]
-                print(f"DEBUG: Facebook fallback AI returned invalid JSON: {ai_response}")
-                print(f"DEBUG: Facebook data before caching: {results['facebook']}")
-        except Exception as ai_e:
-            print(f"AI fallback for Facebook dummy data failed: {ai_e}")
-            results['facebook'] = [
-                {"post": "Sample Facebook post 1. This is fallback content.", "analysis": {"Facebook": {"content_reinforcement": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "content_suppression": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "content_flag": {"status": "safe", "recommendation": None, "reason": "Dummy data."}, "risk_score": 0}}}
-            ]
-            print("DEBUG: Facebook fallback dummy data set.")
-            print(f"DEBUG: Facebook data before caching: {results['facebook']}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Facebook analysis failed: {e}")
+        print(f"Full traceback:\n{error_trace}")
+        # Return proper error state (no fake data)
+        results['facebook'] = [{
+            "post": f"⚠️ Unable to analyze Facebook account {facebook_username}",
+            "post_data": {
+                "caption": None,
+                "data_unavailable": True,
+                "error": str(e),
+                "error_type": "analysis_failed"
+            },
+            "Facebook": {
+                "content_reinforcement": {
+                    "status": "error",
+                    "reason": f"Facebook analysis unavailable: {str(e)[:100]}",
+                    "recommendation": "Try again later or check if account is accessible"
+                },
+                "content_suppression": {
+                    "status": "error",
+                    "reason": "No data available for assessment",
+                    "recommendation": None
+                },
+                "content_flag": {
+                    "status": "error",
+                    "reason": "Unable to flag content without data",
+                    "recommendation": None
+                },
+                "risk_score": -1
+            }
+        }]
+        print(f"DEBUG: Facebook error state set (no fake data)")
+        print(f"DEBUG: Facebook data before caching: {results['facebook']}")
     cache.set(f'facebook_analysis_{user_id}', results['facebook'], 3600)
 
     return results
