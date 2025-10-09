@@ -105,93 +105,69 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 5):
         else:
             return create_inaccessible_account_response("Twitter", username, "could not be accessed")
 
-    tweets_json = json.dumps(tweets, ensure_ascii=False)
-
-    print(f"Analyzing {len(tweets)} tweets...")
+    print(f"🤖 Starting intelligent analysis for {len(tweets)} tweets...")
     
-    # === Build AI Prompt ===
-    prompt = f"""
-    You are an AI-based content recommendation engine for paid users.
-    Analyze the following Twitter posts and return a JSON array where each element corresponds to one tweet.
-
-    Rules:
-    1. Content Reinforcement: If safe, positive, low-risk → encourage similar content.
-    2. Content Suppression: If political → suggest avoiding such topics.
-    3. Content Flag: If culturally sensitive or controversial → recommend removing it.
-    4. Output must be valid JSON ONLY with the following structure for EACH tweet:
-
-    [
-      {{
-        "tweet": "original tweet text",
-        "Twitter": {{
-          "content_reinforcement": {{
-            "status": "safe|caution|warning",
-            "recommendation": "string or null",
-            "reason": "string"
-          }},
-          "content_suppression": {{
-            "status": "safe|caution|warning",
-            "recommendation": "string or null",
-            "reason": "string"
-          }},
-          "content_flag": {{
-            "status": "safe|caution|warning",
-            "recommendation": "string or null",
-            "reason": "string"
-          }},
-          "risk_score": 0
-        }}
-      }},
-      ...
-    ]
-
-    The tweets to analyze (as JSON array):
-    {tweets_json}
-    """
-
-    # === SEND TO OPENROUTER ===
+    # === INTELLIGENT AI ANALYSIS ===
+    from dashboard.intelligent_analyzer import analyze_posts_batch
+    
+    # Convert tweets to standard format
+    tweets_data = []
+    for tweet in tweets:
+        tweets_data.append({
+            'caption': tweet.get('tweet', ''),
+            'text': tweet.get('tweet', ''),
+            'post_text': tweet.get('tweet', ''),
+            'created_at': tweet.get('timestamp'),
+            'likes_count': tweet.get('likes', 0),
+            'comments_count': tweet.get('replies', 0),
+            'type': 'tweet',
+            'hashtags': tweet.get('hashtags', []),
+            'mentions': tweet.get('mentions', []),
+        })
+    
     try:
-        response = client_ai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0,
-        )
-        return response.choices[0].message.content
+        results = analyze_posts_batch("Twitter", tweets_data)
+        print(f"✅ Twitter intelligent analysis complete: {len(results)} tweets")
+        return json.dumps(results, ensure_ascii=False)
     except Exception as e:
-        print(f"AI request failed: {str(e)}")
+        import traceback
+        print(f"❌ Twitter intelligent analysis failed: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        
         error_str = str(e).lower()
         if any(word in error_str for word in ["expired", "invalid", "authentication", "quota", "rate-limit"]):
             send_api_expiry_alert(
-                subject="VisaGuardAI: OpenAI API Expiry/Failure Alert",
-                body=f"Twitter OpenAI API error: {e}",
+                subject="VisaGuardAI: AI Analysis Alert",
+                body=f"Twitter intelligent analysis error: {e}",
                 to_email="syedawaisalishah46@gmail.com"
             )
         
-        # Return fallback analysis data in the expected format
+        # Return fallback error state
         fallback_analysis = []
         for tweet in tweets:
             fallback_analysis.append({
                 "tweet": tweet["tweet"],
+                "post_data": {
+                    'caption': tweet["tweet"],
+                    'data_unavailable': True,
+                },
                 "Twitter": {
                     "content_reinforcement": {
-                        "status": "safe",
-                        "recommendation": "Continue posting similar professional content",
-                        "reason": "Professional and career-focused content is generally safe and appropriate"
+                        "status": "Needs Improvement",
+                        "reason": f"Analysis error: {str(e)[:80]}",
+                        "recommendation": "Try again later"
                     },
                     "content_suppression": {
-                        "status": "safe",
-                        "recommendation": None,
-                        "reason": "No concerning content detected"
+                        "status": "Caution",
+                        "reason": "Could not assess content",
+                        "recommendation": "Manual review recommended"
                     },
                     "content_flag": {
-                        "status": "safe",
-                        "recommendation": None,
-                        "reason": "Content appears professional and appropriate"
+                        "status": "Safe",
+                        "reason": "No data available",
+                        "recommendation": "Review manually"
                     },
-                    "risk_score": 1
+                    "risk_score": -1
                 }
             })
         

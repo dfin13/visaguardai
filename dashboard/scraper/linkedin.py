@@ -90,49 +90,73 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=5):
     
     return posts, None
 
-# --- AI Analyzer ---
+# --- AI Analyzer (Intelligent Context-Aware) ---
 def analyze_posts_with_ai(posts):
-    results = []
+    """
+    Analyze LinkedIn posts using intelligent, context-aware AI.
+    
+    Args:
+        posts: list - List of post dicts with 'post_text' field
+    
+    Returns:
+        list - Analyzed posts with full post_data and analysis
+    """
+    from dashboard.intelligent_analyzer import analyze_posts_batch
+    
+    # Convert posts to standard format for intelligent analyzer
+    posts_data = []
     for post in posts:
-        prompt = f"""Analyze this LinkedIn post and return JSON only:
-
-{{
-  "post": "{post['post_text']}",
-  "analysis": {{
-    "content_reinforcement": {{"status": "safe|caution|warning", "recommendation": "string or null", "reason": "string"}},
-    "content_suppression": {{"status": "safe|caution|warning", "recommendation": "string or null", "reason": "string"}},
-    "content_flag": {{"status": "safe|caution|warning", "recommendation": "string or null", "reason": "string"}},
-    "risk_score": 0-100
-  }}
-}}"""
-
-        try:
-            response = openai_client.chat.completions.create(
-                model="openai/gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                extra_headers={
-                    "HTTP-Referer": "http://localhost",
-                    "X-Title": "LinkedIn Analyzer"
+        posts_data.append({
+            'caption': post.get('post_text', ''),
+            'text': post.get('post_text', ''),
+            'post_text': post.get('post_text', ''),
+            'created_at': post.get('timestamp'),
+            'likes_count': post.get('reactions', 0),
+            'comments_count': post.get('comments', 0),
+            'type': 'text',
+            'hashtags': [],
+            'mentions': [],
+        })
+    
+    try:
+        print(f"🤖 Starting intelligent LinkedIn analysis for {len(posts_data)} posts...")
+        results = analyze_posts_batch("LinkedIn", posts_data)
+        print(f"✅ LinkedIn intelligent analysis complete")
+        return results
+    except Exception as e:
+        import traceback
+        print(f"❌ LinkedIn intelligent analysis failed: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        send_api_expiry_alert("VisaGuardAI: AI Analysis Alert", f"LinkedIn intelligent analysis error: {e}", "syedawaisalishah46@gmail.com")
+        
+        # Fallback to error state
+        return [{
+            "post": post['post_text'],
+            "post_data": {
+                'caption': post['post_text'],
+                'data_unavailable': True,
+            },
+            "analysis": {
+                "LinkedIn": {
+                    "content_reinforcement": {
+                        "status": "Needs Improvement",
+                        "reason": f"Analysis error: {str(e)[:80]}",
+                        "recommendation": "Try again later"
+                    },
+                    "content_suppression": {
+                        "status": "Caution",
+                        "reason": "Could not assess content",
+                        "recommendation": "Manual review recommended"
+                    },
+                    "content_flag": {
+                        "status": "Safe",
+                        "reason": "No data available",
+                        "recommendation": "Review manually"
+                    },
+                    "risk_score": -1
                 }
-            )
-            result = extract_json_from_ai_response(response.choices[0].message.content)
-            results.append(result)
-        except Exception as e:
-            print(f"AI request failed: {str(e)}")
-            send_api_expiry_alert("VisaGuardAI: OpenAI API Expiry/Failure Alert", f"LinkedIn OpenAI API error: {e}", "syedawaisalishah46@gmail.com")
-            results.append({
-                "post": post["post_text"],
-                "analysis": {
-                    "content_reinforcement": {"status": "safe", "recommendation": "Continue similar posts", "reason": "Professional content"},
-                    "content_suppression": {"status": "safe", "recommendation": None, "reason": "No issues"},
-                    "content_flag": {"status": "safe", "recommendation": None, "reason": "Appropriate content"},
-                    "risk_score": 1
-                }
-            })
-    return results
+            }
+        } for post in posts]
 
 # --- Main workflow ---
 def analyze_linkedin_profile(username, limit=5):

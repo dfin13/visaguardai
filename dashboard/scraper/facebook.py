@@ -107,64 +107,34 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         cache.set(f'stage_progress_{user_id}', 15, timeout=60*60)
 
     # ==== Create single prompt ====
-    posts_text = "\n\n".join([f"Post {i+1}: {text}" for i, text in enumerate(posts)])
-
-    prompt = f"""
-You are an AI-based content recommendation engine for paid users.
-Analyze the following Facebook posts and return a JSON array where each element corresponds to one post.
-
-Rules:
-1. Content Reinforcement: If safe, positive, low-risk → encourage similar content.
-2. Content Suppression: If political → suggest avoiding such topics.
-3. Content Flag: If culturally sensitive or controversial → recommend removing it.
-4. Output must be valid JSON ONLY with the following structure for EACH post:
-
-[
-  {{
-    "Facebook": {{
-      "content_reinforcement": {{
-        "status": "safe|caution|warning",
-        "recommendation": "string or null",
-        "reason": "string"
-      }},
-      "content_suppression": {{
-        "status": "safe|caution|warning",
-        "recommendation": "string or null",
-        "reason": "string"
-      }},
-      "content_flag": {{
-        "status": "safe|caution|warning",
-        "recommendation": "string or null",
-        "reason": "string"
-      }},
-      "risk_score": 0
-    }}
-  }},
-  ...
-]
-
-Posts to analyze:
-{posts_text}
-"""
-
-    # ==== One AI Call for all posts ====
-    completion = client_ai.chat.completions.create(
-        extra_headers={
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "Facebook Analyzer",
-        },
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    ai_response = completion.choices[0].message.content
-
-    # Handle OpenRouter 429 rate limit gracefully
-    if 'rate-limited' in ai_response or '429' in ai_response or 'temporarily rate-limited' in ai_response:
-        return {"error": "Facebook analysis is temporarily unavailable due to AI rate-limiting. Please try again in a few minutes or add your own OpenRouter API key for higher limits."}
+    print(f"🤖 Starting intelligent analysis for {len(posts)} Facebook posts...")
+    
+    # === INTELLIGENT AI ANALYSIS ===
+    from dashboard.intelligent_analyzer import analyze_posts_batch
+    
+    # Convert posts to standard format
+    posts_data = []
+    for post_text in posts:
+        posts_data.append({
+            'caption': post_text,
+            'text': post_text,
+            'post_text': post_text,
+            'type': 'post',
+            'hashtags': [],
+            'mentions': [],
+        })
+    
+    try:
+        results = analyze_posts_batch("Facebook", posts_data)
+        print(f"✅ Facebook intelligent analysis complete: {len(results)} posts")
+        ai_response = json.dumps(results, ensure_ascii=False)
+    except Exception as e:
+        import traceback
+        print(f"❌ Facebook intelligent analysis failed: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        
+        # Handle error as rate limit for consistency
+        return {"error": f"Facebook analysis temporarily unavailable: {str(e)[:100]}"}
 
     try:
         results = json.loads(ai_response)

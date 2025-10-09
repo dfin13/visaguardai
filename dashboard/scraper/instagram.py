@@ -145,88 +145,45 @@ def analyze_instagram_posts(username, limit=5):
             }
         }]
 
-    # ==== Build Prompt with rich post data ====
-    posts_text = "\n\n".join([
-        f"Post {i+1} (ID: {p['post_id']}, Type: {p['type']}, {p['likes_count']} likes, {p['comments_count']} comments):\n{p['caption']}" 
-        for i, p in enumerate(posts_data)
-    ])
-    prompt = f"""
-You are an AI-based content recommendation engine.
-Analyze the following Instagram posts and return ONLY valid JSON.
-
-Schema per post:
-[
-  {{
-    "Instagram": {{
-      "content_reinforcement": {{
-        "status": "safe|caution|warning",
-        "recommendation": "string or null",
-        "reason": "string"
-      }},
-      "content_suppression": {{
-        "status": "safe|caution|warning",
-        "recommendation": "string or null",
-        "reason": "string"
-      }},
-      "content_flag": {{
-        "status": "safe|caution|warning",
-        "recommendation": "string or null",
-        "reason": "string"
-      }},
-      "risk_score": 0
-    }}
-  }}
-]
-
-Posts:
-{posts_text}
-"""
-
-    # ==== AI CALL ====
-    print(f"🤖 Sending {len(posts_data)} posts to OpenRouter AI for analysis...")
+    # ==== INTELLIGENT AI ANALYSIS ====
+    print(f"🤖 Starting intelligent analysis for {len(posts_data)} Instagram posts...")
+    
+    from dashboard.intelligent_analyzer import analyze_posts_batch
+    
     try:
-        completion = client_ai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0,
-        )
-
-        ai_response = completion.choices[0].message.content
-        print(f"✅ OpenRouter AI analysis completed")
-
-        # Clean up ```json fences if present
-        ai_response = (
-            ai_response.strip()
-            .removeprefix("```json")
-            .removeprefix("```")
-            .removesuffix("```")
-            .strip()
-        )
-
-        try:
-            results = json.loads(ai_response)
-        except Exception as je:
-            print(f"JSON parsing failed: {je}\nRaw AI response: {ai_response}")
-            results = [{"Instagram": {"error": "AI parsing failed", "raw": ai_response}} for _ in posts_data]
+        results = analyze_posts_batch("Instagram", posts_data)
+        print(f"✅ Instagram intelligent analysis complete: {len(results)} posts analyzed")
+        return results
     except Exception as e:
-        print(f"AI analysis failed: {e}")
-        results = [{"Instagram": {"error": "AI call failed", "raw": str(e)}} for _ in posts_data]
-
-    # ==== Final output with full post data ====
-    final = []
-    for i, post_data in enumerate(posts_data):
-        analysis = results[i] if isinstance(results, list) and i < len(results) else results
-        final.append({
-            "post": post_data["caption"],  # Keep for backward compatibility
-            "post_data": post_data,  # Full structured data
-            "analysis": analysis
-        })
-
-    print(f"✅ Instagram analysis complete: {len(final)} posts analyzed")
-    return final
+        import traceback
+        print(f"❌ Intelligent analysis failed: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        
+        # Fallback: Return structured error
+        return [{
+            "post": post_data.get("caption", "[No caption]"),
+            "post_data": post_data,
+            "analysis": {
+                "Instagram": {
+                    "content_reinforcement": {
+                        "status": "Needs Improvement",
+                        "reason": f"Analysis service error: {str(e)[:100]}",
+                        "recommendation": "Try again later"
+                    },
+                    "content_suppression": {
+                        "status": "Caution",
+                        "reason": "Could not assess content risk",
+                        "recommendation": "Manual review recommended"
+                    },
+                    "content_flag": {
+                        "status": "Safe",
+                        "reason": "No data available",
+                        "recommendation": "Review manually"
+                    },
+                    "risk_score": -1
+                }
+            }
+        } for post_data in posts_data]
 
 
 # # ==== Example Run ====
