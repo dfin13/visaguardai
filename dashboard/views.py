@@ -316,23 +316,31 @@ def start_analysis(request):
 
         # Reset payment status for new analysis (pay-per-analysis model)
         request.session['current_analysis_paid'] = False
-        # Add timestamp to track when analysis was created
-        request.session['analysis_timestamp'] = time.time()
         
-        # Clear any existing analysis data
+        # Create unique run ID to prevent cache collisions
+        import uuid
+        run_id = str(uuid.uuid4())[:8]  # Short unique ID
+        request.session['analysis_run_id'] = run_id
+        request.session['analysis_timestamp'] = time.time()
+        print(f"🆔 New analysis run ID: {run_id}")
+        
+        # Clear any existing analysis data from session
         request.session.pop('instagram_analysis', None)
         request.session.pop('linkedin_analysis', None)
+        request.session.pop('twitter_analysis', None)
         request.session.pop('facebook_analysis', None)
         
         # Set analysis state flags
         request.session['analysis_started'] = True
         request.session['analysis_complete'] = False
         
-        # Clear cache as well
+        # Clear ALL cached analysis data for this user
         from django.core.cache import cache
         cache.delete(f'instagram_analysis_{request.user.id}')
         cache.delete(f'linkedin_analysis_{request.user.id}')
+        cache.delete(f'twitter_analysis_{request.user.id}')
         cache.delete(f'facebook_analysis_{request.user.id}')
+        print(f"🗑️ Cleared all cached analysis data for user {request.user.id}")
         
         # Set initial analysis stage
         cache.set(f'analysis_stage_{request.user.id}', 'starting', timeout=60*60)
@@ -352,28 +360,34 @@ def start_analysis(request):
                 from .scraper.linkedin import generate_fallback_linkedin_posts
                 fallback_posts = generate_fallback_linkedin_posts(linkedin_username)
                 
-                # Create fallback analysis for each post
+                # Return structured error (no fake safe data)
                 fallback_results = []
                 for post in fallback_posts:
                     fallback_results.append({
                         "post": post["post_text"],
+                        "post_data": {
+                            "caption": post["post_text"],
+                            "data_unavailable": True,
+                            "error": "Analysis service unavailable",
+                            "error_type": "analysis_failed"
+                        },
                         "analysis": {
                             "content_reinforcement": {
-                                "status": "safe",
-                                "recommendation": "Continue posting similar professional content",
-                                "reason": "Professional and career-focused content is generally safe and appropriate"
+                                "status": "error",
+                                "recommendation": "Try again later or contact support",
+                                "reason": "Analysis service unavailable - unable to assess content"
                             },
                             "content_suppression": {
-                                "status": "safe",
+                                "status": "error",
                                 "recommendation": None,
-                                "reason": "No concerning content detected"
+                                "reason": "Data unavailable for risk assessment"
                             },
                             "content_flag": {
-                                "status": "safe",
+                                "status": "error",
                                 "recommendation": None,
-                                "reason": "Content appears professional and appropriate"
+                                "reason": "Unable to flag content without analysis data"
                             },
-                            "risk_score": 1
+                            "risk_score": -1
                         }
                     })
                 
