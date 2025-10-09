@@ -307,8 +307,9 @@ def analyze_posts_batch(platform, posts_data_list):
         
         analysis = analyze_post_intelligent(platform, post_data)
         
-        # Wrap analysis in platform key
-        platform_key = platform.capitalize()
+        # Wrap analysis in platform key (preserve exact casing for consistency)
+        # Use the platform name as-is to ensure template compatibility
+        platform_key = platform  # Keep original casing (Instagram, LinkedIn, Twitter, etc.)
         wrapped_analysis = {
             platform_key: analysis
         }
