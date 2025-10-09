@@ -23,16 +23,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-^res4t=kku7n*d#m@ajk2&v=exf@!^71wbehih^zcvwd-okonl')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "visaguardai.com",
     "www.visaguardai.com",
-"148.230.110.112",
-"192.168.18.135"
+    "148.230.110.112",
+    "192.168.18.135"
 ]
+
+# Security Settings for Production
+SECURE_SSL_REDIRECT = not DEBUG  # Redirect HTTP to HTTPS in production
+SESSION_COOKIE_SECURE = not DEBUG  # Send session cookie only over HTTPS
+CSRF_COOKIE_SECURE = not DEBUG  # Send CSRF cookie only over HTTPS
+CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking
+SECURE_CONTENT_TYPE_NOSNIFF = True  # Prevent MIME-sniffing
+SECURE_BROWSER_XSS_FILTER = True  # Enable browser XSS filtering
 
 CSRF_TRUSTED_ORIGINS = [
     "http://visaguardai.com",
@@ -189,9 +202,10 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 LOGIN_URL = '/auth/login/'          # This fixes redirection when user is not logged in
 
 LOGIN_REDIRECT_URL = '/dashboard/'
-# Twitter credentials
-TWITTER_USERNAME = "befap77564"
-TWITTER_PASSWORD = "1-03333435aA@"
+
+# Twitter credentials (from environment variables)
+TWITTER_USERNAME = os.getenv('TWITTER_USERNAME', 'befap77564')
+TWITTER_PASSWORD = os.getenv('TWITTER_PASSWORD')
 
 # Gemini API key
 # GEMINI_API_KEY is loaded from environment variables above
@@ -211,9 +225,8 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = 'visaguardai@gmail.com'
-# EMAIL_HOST_PASSWORD = 'aqpp rtwq zhqk ldxi'
-EMAIL_HOST_PASSWORD = 'xtfi xyqs dicz ekre'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'visaguardai@gmail.com')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 
 # For API expiry alert system
 ALERT_GMAIL_USER = EMAIL_HOST_USER
