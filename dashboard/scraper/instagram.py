@@ -41,6 +41,10 @@ def analyze_instagram_posts(username, limit=5):
     """
     from .account_checker import check_scraping_result, create_inaccessible_account_response, is_account_private_error
 
+    print(f"\n🔍 INSTAGRAM ANALYSIS STARTING")
+    print(f"   Username: {username}")
+    print(f"   Limit: {limit} posts")
+
     # ==== SCRAPE INSTAGRAM POSTS ====
     run_input = {
         "username": [username],
@@ -49,14 +53,19 @@ def analyze_instagram_posts(username, limit=5):
         "shouldDownloadMedia": False,
     }
 
-    print(f"Scraping {limit} Instagram posts for {username}...")
+    print(f"📡 Triggering Apify Instagram scraper for {username}...")
     try:
         run = apify_client.actor("apify/instagram-post-scraper").call(run_input=run_input)
+        print(f"✅ Apify run completed! Run ID: {run.get('id', 'unknown')}")
+        print(f"   Dataset ID: {run.get('defaultDatasetId', 'unknown')}")
+        
         posts = []
         for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
             post_text = item.get("caption", "").strip()
             if post_text:
                 posts.append(post_text)
+        
+        print(f"✅ Scraped {len(posts)} Instagram posts")
         
         # Check if account is accessible
         is_accessible, result = check_scraping_result(posts, "Instagram", username)
@@ -107,6 +116,7 @@ Posts:
 """
 
     # ==== AI CALL ====
+    print(f"🤖 Sending {len(posts)} posts to OpenRouter AI for analysis...")
     try:
         completion = client_ai.chat.completions.create(
             model="gpt-4o-mini",
@@ -118,6 +128,7 @@ Posts:
         )
 
         ai_response = completion.choices[0].message.content
+        print(f"✅ OpenRouter AI analysis completed")
 
         # Clean up ```json fences if present
         ai_response = (
@@ -143,6 +154,7 @@ Posts:
         analysis = results[i] if isinstance(results, list) and i < len(results) else results
         final.append({"post": post, "analysis": analysis})
 
+    print(f"✅ Instagram analysis complete: {len(final)} posts analyzed")
     return final
 
 

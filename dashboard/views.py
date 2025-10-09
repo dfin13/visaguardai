@@ -270,11 +270,23 @@ import threading
 
 def process_analysis_async(user_id, instagram_username, linkedin_username, twitter_username, facebook_username=None):
     """Process analysis in background thread, always returns results (real or dummy) for each platform."""
+    print(f"\n{'='*80}")
+    print(f"🔍 BACKGROUND ANALYSIS STARTED")
+    print(f"   User ID: {user_id}")
+    print(f"   Instagram: {instagram_username or 'None'}")
+    print(f"   LinkedIn: {linkedin_username or 'None'}")
+    print(f"   Twitter: {twitter_username or 'None'}")
+    print(f"   Facebook: {facebook_username or 'None'}")
+    print(f"{'='*80}\n")
+    
     from .utils import analyze_all_platforms
     try:
         analyze_all_platforms(user_id, instagram_username, linkedin_username, twitter_username, facebook_username)
+        print(f"\n✅ Background analysis completed for user {user_id}\n")
     except Exception as e:
-        print(f"Unified background analysis failed: {e}")
+        import traceback
+        print(f"\n❌ Unified background analysis failed: {e}")
+        print(f"Traceback:\n{traceback.format_exc()}\n")
 
 
 
@@ -378,7 +390,7 @@ def start_analysis(request):
             target=process_analysis_async, 
             args=(request.user.id, instagram_username, linkedin_username, twitter_username, facebook_username)
         )
-        thread.daemon = True
+        thread.daemon = False  # Changed from True - allow thread to complete even after response
         thread.start()
             
         return JsonResponse({'success': True, 'message': 'Analysis started successfully'})
