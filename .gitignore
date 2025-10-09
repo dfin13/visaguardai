@@ -156,3 +156,4 @@ backups/
 logs/
 oauth_config_*.json
 visaguard_db_backup_*.sql*
+ANALYSIS_INSTANT_COMPLETION_DIAGNOSTIC.md
