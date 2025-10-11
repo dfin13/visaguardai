@@ -2,7 +2,7 @@
 import multiprocessing
 
 # Server socket
-bind = "unix:/var/www/visaguardai/visaguardai.sock"
+bind = "unix:/run/gunicorn.sock"
 backlog = 2048
 
 # Worker processes
