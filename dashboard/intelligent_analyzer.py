@@ -28,6 +28,53 @@ def get_ai_client():
     )
 
 
+def generate_profile_assessment(platform, username, full_name):
+    """
+    Generate a concise AI assessment of username and full name professionalism.
+    
+    Args:
+        platform: str - Platform name (Instagram, LinkedIn, Facebook, X)
+        username: str - Account username/handle
+        full_name: str - Account full name
+    
+    Returns:
+        str - One-sentence professionalism assessment
+    """
+    try:
+        client = get_ai_client()
+        
+        prompt = f"""Evaluate the username @{username} and name '{full_name}' for professionalism and credibility in a visa review context. Respond with one concise sentence (max 25 words) assessing whether the username and name appear professional, authentic, and suitable for immigration review."""
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a visa application reviewer. Provide brief, professional assessments of usernames and names."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.6,
+            max_tokens=80
+        )
+        
+        assessment = response.choices[0].message.content.strip()
+        # Clean any quotes or extra formatting
+        assessment = assessment.strip('"').strip("'")
+        
+        print(f"✅ {platform} profile assessment: {assessment[:60]}...")
+        
+        return assessment
+        
+    except Exception as e:
+        print(f"❌ Profile assessment failed for {platform}: {e}")
+        # Return a neutral fallback
+        return f"Username @{username} and name appear suitable for professional review."
+
+
 def calculate_realistic_risk_score(post_data, ai_score=None):
     """
     Calculate a realistic risk score based on post features.

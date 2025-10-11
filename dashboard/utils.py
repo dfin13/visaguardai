@@ -115,7 +115,17 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     from .scraper.linkedin import analyze_linkedin_profile
     from .scraper.t import analyze_twitter_profile
     from .scraper.facebook import analyze_facebook_posts
+    from .intelligent_analyzer import generate_profile_assessment
     from django.core.cache import cache
+    from django.contrib.auth.models import User
+    
+    # Get user's full name for profile assessments
+    try:
+        user = User.objects.get(id=user_id)
+        full_name = f"{user.first_name} {user.last_name}".strip() or "User"
+    except:
+        full_name = "User"
+    
     results = {}
     # Instagram - Process with detailed progress stages
     import time
@@ -127,7 +137,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
             time.sleep(2)  # 2 second delay to show progress
             
             # Blueprint scanning stage
-            # Blueprint scanning stage removed - using simplified progress stages
+            cache.set(f'analysis_stage_{user_id}', 'blueprint_scanning', timeout=60*60)
             cache.set(f'stage_progress_{user_id}', 55, timeout=60*60)
             time.sleep(3)  # 3 second delay to show progress
             
@@ -137,11 +147,18 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
             time.sleep(3)  # 3 second delay to show progress
             
             # Comment scanning stage
-            # Comment scanning stage removed - using simplified progress stages
+            cache.set(f'analysis_stage_{user_id}', 'comment_scanning', timeout=60*60)
             cache.set(f'stage_progress_{user_id}', 85, timeout=60*60)
             time.sleep(2)  # 2 second delay to show progress
             
             results['instagram'] = analyze_instagram_posts(instagram_username)
+            # Generate profile assessment
+            profile_assessment = generate_profile_assessment("Instagram", instagram_username, full_name)
+            results['instagram_profile'] = {
+                'username': instagram_username,
+                'full_name': full_name,
+                'assessment': profile_assessment
+            }
             print(f"DEBUG: Instagram analysis result: {results['instagram']}")
         else:
             results['instagram'] = []
@@ -166,6 +183,8 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         }]
         print(f"DEBUG: Instagram error state set (not fake safe data)")
     cache.set(f'instagram_analysis_{user_id}', results['instagram'], 3600)
+    if 'instagram_profile' in results:
+        cache.set(f'instagram_profile_{user_id}', results['instagram_profile'], 3600)
 
     # LinkedIn - Skip since it's already processed in the main thread
     # LinkedIn analysis is handled directly in start_analysis() to avoid duplication
@@ -176,6 +195,13 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     try:
         if twitter_username:
             results['twitter'] = analyze_twitter_profile(twitter_username)
+            # Generate profile assessment
+            profile_assessment = generate_profile_assessment("X", twitter_username, full_name)
+            results['twitter_profile'] = {
+                'username': twitter_username,
+                'full_name': full_name,
+                'assessment': profile_assessment
+            }
             print(f"DEBUG: Twitter analysis result: {results['twitter']}")
         else:
             results['twitter'] = []
@@ -214,11 +240,20 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         }]
         print(f"DEBUG: Twitter error state set (no fake data)")
     cache.set(f'twitter_analysis_{user_id}', results['twitter'], 3600)
+    if 'twitter_profile' in results:
+        cache.set(f'twitter_profile_{user_id}', results['twitter_profile'], 3600)
 
     # Facebook
     try:
         if facebook_username:
             results['facebook'] = analyze_facebook_posts(facebook_username, limit=5, user_id=user_id)
+            # Generate profile assessment
+            profile_assessment = generate_profile_assessment("Facebook", facebook_username, full_name)
+            results['facebook_profile'] = {
+                'username': facebook_username,
+                'full_name': full_name,
+                'assessment': profile_assessment
+            }
             print(f"DEBUG: Facebook analysis result: {results['facebook']}")
             print(f"DEBUG: Facebook data before caching: {results['facebook']}")
         else:
@@ -259,6 +294,8 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         print(f"DEBUG: Facebook error state set (no fake data)")
         print(f"DEBUG: Facebook data before caching: {results['facebook']}")
     cache.set(f'facebook_analysis_{user_id}', results['facebook'], 3600)
+    if 'facebook_profile' in results:
+        cache.set(f'facebook_profile_{user_id}', results['facebook_profile'], 3600)
 
     return results
 

@@ -349,12 +349,24 @@ def start_analysis(request):
         # --- Call analyze_linkedin_profile directly if linkedin_username is present ---
         if linkedin_username:
             try:
+                from .intelligent_analyzer import generate_profile_assessment
+                
                 cache.set(f'analysis_stage_{request.user.id}', 'linkedin_processing', timeout=60*60)
                 cache.set(f'stage_progress_{request.user.id}', 10, timeout=60*60)
                 
                 # Reduced to 3 posts for 40% faster processing (LinkedIn scraping is inherently slow)
                 linkedin_result = analyze_linkedin_profile(linkedin_username, limit=3)
                 cache.set(f'linkedin_analysis_{request.user.id}', linkedin_result, timeout=60*60)
+                
+                # Generate profile assessment
+                full_name = f"{request.user.first_name} {request.user.last_name}".strip() or "User"
+                profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username, full_name)
+                linkedin_profile = {
+                    'username': linkedin_username,
+                    'full_name': full_name,
+                    'assessment': profile_assessment
+                }
+                cache.set(f'linkedin_profile_{request.user.id}', linkedin_profile, timeout=60*60)
             except Exception as e:
                 import traceback
                 print(f"❌ LinkedIn analysis failed: {e}")
@@ -788,6 +800,11 @@ def result_view(request):
             if analysis is not None:
                 request.session[session_key] = analysis
         return analysis
+    
+    # Helper to fetch profile summaries from cache
+    def get_profile_summary(platform):
+        cache_key = f'{platform}_profile_{user_id}'
+        return cache.get(cache_key)
 
     twitter_analysis = get_or_set_analysis('twitter')
     print(twitter_analysis)
@@ -923,15 +940,24 @@ def result_view(request):
         except (KeyError, TypeError):
             continue
     
+    # Fetch profile summaries
+    instagram_profile = get_profile_summary('instagram')
+    linkedin_profile = get_profile_summary('linkedin')
+    twitter_profile = get_profile_summary('twitter')
+    facebook_profile = get_profile_summary('facebook')
+    
     context = {
         'twitter_analyses': twitter_analysis,
         'safe_count': safe_count,
         'caution_count': caution_count,
         'warning_count': warning_count,
         'instagram_analysis': instagram_analysis,
-        
+        'instagram_profile': instagram_profile,
         'linkedin_analysis': linkedin_analysis,
+        'linkedin_profile': linkedin_profile,
         'facebook_analysis': facebook_analysis,
+        'facebook_profile': facebook_profile,
+        'twitter_profile': twitter_profile,
       }
     return render(request, 'dashboard/result.html', context) 
 
