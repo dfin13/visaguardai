@@ -215,11 +215,7 @@ def build_context_aware_prompt(platform, post_data):
             engagement_note += " (low visibility)"
         context_parts.append(engagement_note)
     
-    # Media context
-    if media_type:
-        context_parts.append(f"Media Type: {media_type}")
-    
-    # Hashtags
+    # Hashtags (skip media type - not relevant for visa review)
     if hashtags and len(hashtags) > 0:
         context_parts.append(f"Hashtags: {', '.join(hashtags[:5])}")
     
@@ -231,92 +227,100 @@ def build_context_aware_prompt(platform, post_data):
     if is_sponsored:
         context_parts.append("⚠️ This is sponsored/promotional content")
     
+    # Detect truly missing caption
+    has_caption = bool(caption and caption.strip())
+    
     # Build comprehensive prompt
-    prompt = f"""You are an expert visa application reviewer analyzing social media content for immigration risk assessment.
+    prompt = f"""You are a visa application coach conducting a critical review of social media content that will be scrutinized by immigration officers.
 
 PLATFORM: {platform}
-POST ID: {post_id}
 
-CONTEXT:
+POST DATA:
 {chr(10).join(f"• {part}" for part in context_parts)}
 
-YOUR TASK:
-Analyze THIS EXACT POST for visa application risk. You MUST cite specific details from the post data provided above.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. **Content Reinforcement**: Identify positive elements IN THIS SPECIFIC POST
-   - Quote or reference actual caption phrases if present
-   - Mention specific hashtags, location, or engagement numbers
-   - Cite actual media type and content themes
+YOUR ROLE:
+Assess this post as an immigration officer would: skeptical, detail-oriented, and culturally sensitive. Immigration officers look for red flags, inconsistencies, and anything that could suggest risk.
 
-2. **Content Suppression**: Identify concerning elements IN THIS SPECIFIC POST
-   - Quote problematic phrases or keywords from the caption
-   - Reference specific location if geopolitically sensitive
-   - Cite actual hashtags that could raise concerns
-   - Note if caption is missing or extremely vague
+ANALYSIS REQUIREMENTS:
 
-3. **Content Flag**: Identify critical red flags IN THIS SPECIFIC POST
-   - Must be based on actual content, not hypotheticals
-   - Reference specific words, locations, or visual themes
-   - If safe, state why based on actual content
+1. **Content Reinforcement** — What strengthens this applicant's profile?
+   • Identify career indicators, professional language, educational references
+   • Note community involvement, stable relationships, cultural engagement
+   • Cite specific phrases, hashtags, or themes that demonstrate responsibility
+   • {'If caption is missing, assess what information gap this creates and how it weakens the post' if not has_caption else 'Quote exact wording that supports the applicant'}
 
-🚨 MANDATORY REQUIREMENTS 🚨
+2. **Content Suppression** — What could raise concerns or be misinterpreted?
+   • Flag ambiguous language, casual tone in serious contexts, or party culture references
+   • Identify keywords related to alcohol, nightlife, political topics, or controversial hashtags
+   • {'Note absence of explanatory text and resulting ambiguity' if not has_caption else 'Quote phrases that could be read negatively'}
+   • Only mention location if geopolitically sensitive (e.g., Iran, Syria, disputed regions)
+   • Only mention engagement if unusually high (possible influencer) or suspiciously low
 
-YOU MUST:
-✅ Quote actual words/phrases from the caption (if provided)
-✅ Reference actual location name (if provided)
-✅ Cite actual engagement numbers (likes/comments)
-✅ Mention actual hashtags (if provided)
-✅ Describe actual media type (Image/Video/Sidecar)
-✅ Reference actual post age (recency)
+3. **Content Flag** — Does this post present serious immigration risk?
+   • Identify explicit red flags: violence, illegal activity, hate speech, security threats
+   • Detect cultural insensitivity, references to overstaying, or deceptive behavior
+   • {'Warn that lack of context increases scrutiny risk' if not has_caption else 'Cite specific content that triggers concern'}
+   • If safe, briefly explain why (e.g., "professional tone," "educational focus")
 
-YOU MUST NOT:
-❌ Use generic phrases like "professional content" without citing examples
-❌ Say "appropriate" without explaining WHY based on actual content
-❌ Provide recommendations that don't reference specific post elements
-❌ Copy-paste similar responses for different posts
-❌ Ignore the context data provided above
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-EXAMPLES OF GOOD vs BAD RESPONSES:
+CRITICAL RULES:
 
-❌ BAD (Generic):
-"reason": "Post shows professional content suitable for visa review"
+✅ ALWAYS CITE: Quote caption phrases, mention hashtags by name, reference specific engagement numbers or locations
+✅ VARY LANGUAGE: Use different phrasing for each post (avoid "lack of caption," "maintain positive content," "continue posting")
+✅ BE CRITICAL: Act as a skeptical reviewer, not a cheerleader
+✅ ONLY FLAG RELEVANT DETAILS: Don't mention timing unless post is very old (>1 year), don't mention location unless sensitive
+✅ DETECT CAPTION PRESENCE: {'This post has NO caption — address the information gap' if not has_caption else 'Caption is present — analyze its content'}
 
-✅ GOOD (Specific):
-"reason": "Caption 'Excited to start my internship at Google Seattle' demonstrates career focus and includes professional workplace reference with specific company and location"
+❌ NEVER:
+• Use generic phrases like "professional content" without examples
+• Mention "sidecar," "carousel," or technical media types
+• Repeat the same language across multiple posts
+• Comment on normal engagement or neutral locations
+• Leave any JSON field empty
 
-❌ BAD (Generic):
-"reason": "No concerning content detected"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✅ GOOD (Specific):
-"reason": "Caption lacks any text (no caption provided), creating ambiguity about post context. Visual content cannot be verified without caption"
+RESPONSE VARIATIONS (use diverse phrasing):
 
-❌ BAD (Generic):
-"recommendation": "Continue posting professional content"
+Instead of "lack of caption," try:
+• "No explanatory text provided"
+• "Absence of written context"
+• "Post omits descriptive information"
 
-✅ GOOD (Specific):
-"recommendation": "Add detailed captions explaining the context of '#nightlife' and 'Berlin' location to clarify this as a cultural experience rather than party-focused content"
+Instead of "maintain positive content," try:
+• "Strengthen profile with career-focused updates"
+• "Prioritize posts demonstrating professional growth"
+• "Share content highlighting community ties"
 
-Return ONLY valid JSON in this exact format:
+Instead of "professional content," try:
+• "Career-oriented messaging"
+• "Workplace achievement showcase"
+• "Educational milestone documentation"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY valid JSON:
 {{
   "content_reinforcement": {{
     "status": "Safe|Positive|Needs Improvement",
-    "reason": "<specific contextual explanation referencing the actual post content, location, or engagement>",
-    "recommendation": "<one actionable suggestion to maximize positive impact>"
+    "reason": "<Critical assessment citing specific caption quotes, hashtags, or engagement data>",
+    "recommendation": "<Actionable advice referencing this post's specific elements>"
   }},
   "content_suppression": {{
     "status": "Safe|Caution|Risky",
-    "reason": "<explain what elements could be misunderstood or taken negatively by visa reviewers>",
-    "recommendation": "<how to reduce ambiguity or risk in future posts>"
+    "reason": "<Identify ambiguities, risky keywords, or concerning themes with examples>",
+    "recommendation": "<How to clarify or mitigate specific risks found>"
   }},
   "content_flag": {{
     "status": "Safe|Sensitive|High-Risk",
-    "reason": "<identify any red flags or sensitive topics that could trigger additional scrutiny>",
-    "recommendation": "<how to address or remove problematic content if applicable>"
+    "reason": "<Flag serious red flags or explain why post is immigration-safe>",
+    "recommendation": "<Address critical issues or suggest profile strengthening>"
   }},
-  "risk_score": <0-100 integer based on overall visa application risk>
+  "risk_score": <0-100 integer>
 }}
-
-NEVER leave fields empty or null. If the post is entirely safe, still provide specific reasoning.
 """
     
     return prompt
@@ -348,7 +352,7 @@ def analyze_post_intelligent(platform, post_data, retry_count=0):
             messages=[
                 {
                     "role": "system", 
-                    "content": "You are a visa application analyst who MUST cite specific post details. NEVER write generic responses like 'professional content' or 'no concerns'. Always quote caption phrases, mention hashtags by name (#worklife, #party, etc.), cite engagement numbers (150 likes, 20 comments), and reference locations (Berlin, Dubai, etc.). If post has no caption, explicitly state 'No caption provided'. Return valid JSON only with content-specific reasoning in every field."
+                    "content": "You are a critical visa application coach reviewing social media for immigration scrutiny. Be skeptical, professional, and specific. Quote actual captions, cite hashtags by name, reference engagement numbers. Vary your language—avoid repetitive phrases like 'lack of caption' or 'maintain content'. Never mention technical terms like 'sidecar' or 'carousel'. Only flag timing/location if clearly relevant (very old posts, geopolitically sensitive regions). Every analysis must reference visible content and provide unique, actionable feedback. Return valid JSON only."
                 },
                 {
                     "role": "user", 
