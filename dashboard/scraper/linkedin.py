@@ -93,18 +93,30 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
     posts = []
     post_count = 0
     
-    # Iterate through dataset and collect ONLY captions (post text)
+    # Iterate through dataset and collect post text AND URLs
     for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
-        # Extract only the caption/text content
+        # Extract the caption/text content
         post_text = (
             item.get("text") or item.get("post_text") or item.get("content") or
             item.get("description") or item.get("post_content")
         )
         
+        # Extract the post URL
+        post_url = (
+            item.get("url") or item.get("post_url") or item.get("postUrl") or 
+            item.get("link") or item.get("permalink") or None
+        )
+        
         if post_text:
-            posts.append({"post_text": post_text})
+            posts.append({
+                "post_text": post_text,
+                "post_url": post_url,
+                "timestamp": item.get("timestamp") or item.get("created_at") or item.get("date"),
+                "reactions": item.get("reactions") or item.get("likes") or 0,
+                "comments": item.get("comments") or item.get("commentsCount") or 0,
+            })
             post_count += 1
-            print(f"   ✓ Collected post {post_count}/{limit}")
+            print(f"   ✓ Collected post {post_count}/{limit} (URL: {'✓' if post_url else '✗'})")
         
         # Hard stop at limit to prevent excessive scanning
         if post_count >= limit:
@@ -141,6 +153,7 @@ def analyze_posts_with_ai(posts):
             'caption': post.get('post_text', ''),
             'text': post.get('post_text', ''),
             'post_text': post.get('post_text', ''),
+            'post_url': post.get('post_url'),  # Add post URL for template display
             'created_at': post.get('timestamp'),
             'likes_count': post.get('reactions', 0),
             'comments_count': post.get('comments', 0),
