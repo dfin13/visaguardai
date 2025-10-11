@@ -28,6 +28,114 @@ def get_ai_client():
     )
 
 
+def calculate_realistic_risk_score(post_data, ai_score=None):
+    """
+    Calculate a realistic risk score based on post features.
+    Uses incremental modifiers instead of harsh penalties.
+    
+    Args:
+        post_data: dict - Post metadata
+        ai_score: int - AI-generated score (optional, used as reference)
+    
+    Returns:
+        int - Adjusted risk score (0-100)
+    """
+    # Start with base caution score
+    score = 10
+    
+    # Extract post features
+    caption = (post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or '').strip()
+    likes = post_data.get('likes_count', 0) or 0
+    comments = post_data.get('comments_count', 0) or 0
+    created_at = post_data.get('created_at', '')
+    location = post_data.get('location_name', '')
+    hashtags = post_data.get('hashtags', []) or []
+    
+    # === CAPTION ANALYSIS ===
+    if not caption:
+        # Missing caption
+        score += 10
+        print(f"  [MODIFIER] Missing caption: +10 → {score}")
+    elif len(caption.split()) <= 3:
+        # Vague caption (1-3 words)
+        score += 5
+        print(f"  [MODIFIER] Vague caption ({len(caption.split())} words): +5 → {score}")
+    
+    # === KEYWORD ANALYSIS ===
+    controversial_keywords = [
+        'politics', 'political', 'alcohol', 'beer', 'wine', 'drunk', 'party',
+        'nightlife', 'club', 'bar', 'protest', 'rally', 'demonstration'
+    ]
+    caption_lower = caption.lower()
+    if any(keyword in caption_lower for keyword in controversial_keywords):
+        score += 10
+        print(f"  [MODIFIER] Controversial keyword detected: +10 → {score}")
+    
+    # === POSITIVE INDICATORS ===
+    positive_keywords = [
+        'volunteer', 'education', 'university', 'student', 'teamwork',
+        'community', 'professional', 'career', 'work', 'project', 'learning'
+    ]
+    if any(keyword in caption_lower for keyword in positive_keywords):
+        score -= 10
+        print(f"  [MODIFIER] Positive professional indicator: -10 → {score}")
+    
+    # === RECENCY ANALYSIS ===
+    if created_at:
+        try:
+            from datetime import datetime
+            post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            days_old = (datetime.now(post_date.tzinfo) - post_date).days
+            if days_old > 730:  # >2 years
+                score += 5
+                print(f"  [MODIFIER] Old post ({days_old} days): +5 → {score}")
+        except:
+            pass
+    
+    # === ENGAGEMENT ANALYSIS ===
+    total_engagement = likes + comments
+    
+    if total_engagement == 0:
+        # No engagement data
+        score += 5
+        print(f"  [MODIFIER] No engagement data: +5 → {score}")
+    elif total_engagement < 30:
+        # Low engagement
+        score += 3
+        print(f"  [MODIFIER] Low engagement ({total_engagement}): +3 → {score}")
+    elif total_engagement > 500:
+        # High engagement (credibility boost)
+        score -= 5
+        print(f"  [MODIFIER] High engagement ({total_engagement}): -5 → {score}")
+    
+    # === CONTENT FLAGS (SEVERE) ===
+    severe_keywords = [
+        'violence', 'illegal', 'weapon', 'drug', 'hate', 'threat',
+        'extremist', 'radical', 'terrorist'
+    ]
+    if any(keyword in caption_lower for keyword in severe_keywords):
+        score += 30
+        print(f"  [MODIFIER] Explicit severe content: +30 → {score}")
+    
+    # === LOCATION SENSITIVITY ===
+    sensitive_locations = [
+        'iran', 'syria', 'north korea', 'afghanistan', 'iraq',
+        'venezuela', 'cuba', 'russia', 'ukraine'
+    ]
+    if location:
+        location_lower = location.lower()
+        if any(loc in location_lower for loc in sensitive_locations):
+            score += 10
+            print(f"  [MODIFIER] Geopolitically sensitive location: +10 → {score}")
+    
+    # Clamp score between 0 and 100
+    score = max(0, min(100, score))
+    
+    print(f"  [FINAL] Calculated risk score: {score}")
+    
+    return score
+
+
 def build_context_aware_prompt(platform, post_data):
     """
     Build an intelligent, context-rich prompt for AI analysis.
@@ -222,12 +330,21 @@ def analyze_post_intelligent(platform, post_data, retry_count=0):
         # Parse JSON
         result = json.loads(ai_response)
         
-        # Log success
+        # Calculate realistic risk score based on post features
+        ai_risk_score = result.get('risk_score', 50)
+        adjusted_score = calculate_realistic_risk_score(post_data, ai_risk_score)
+        
+        # Override AI score with calculated score
+        result['risk_score'] = adjusted_score
+        
+        # Log success with both scores for comparison
+        caption_preview = (post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or '')[:60]
         print(f"✅ {platform} analysis: "
               f"Reinforcement={result.get('content_reinforcement', {}).get('status')}, "
               f"Suppression={result.get('content_suppression', {}).get('status')}, "
               f"Flag={result.get('content_flag', {}).get('status')}, "
-              f"Risk={result.get('risk_score')}")
+              f"AI_Risk={ai_risk_score} → Adjusted_Risk={adjusted_score}")
+        print(f"  [DEBUG] Post: {caption_preview}... → risk_score: {adjusted_score}")
         
         return result
         
