@@ -62,14 +62,19 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
         print(f"  [MODIFIER] Vague caption ({len(caption.split())} words): +5 → {score}")
     
     # === KEYWORD ANALYSIS ===
-    controversial_keywords = [
-        'politics', 'political', 'alcohol', 'beer', 'wine', 'drunk', 'party',
-        'nightlife', 'club', 'bar', 'protest', 'rally', 'demonstration'
-    ]
     caption_lower = caption.lower()
-    if any(keyword in caption_lower for keyword in controversial_keywords):
-        score += 10
-        print(f"  [MODIFIER] Controversial keyword detected: +10 → {score}")
+    
+    # Alcohol/nightlife (higher risk)
+    alcohol_keywords = ['alcohol', 'beer', 'wine', 'drunk', 'party', 'nightlife', 'club', 'bar']
+    if any(keyword in caption_lower for keyword in alcohol_keywords):
+        score += 20
+        print(f"  [MODIFIER] Alcohol/nightlife content: +20 → {score}")
+    
+    # Political/controversial (moderate risk)
+    political_keywords = ['politics', 'political', 'protest', 'rally', 'demonstration']
+    if any(keyword in caption_lower for keyword in political_keywords):
+        score += 15
+        print(f"  [MODIFIER] Political/controversial content: +15 → {score}")
     
     # === POSITIVE INDICATORS ===
     positive_keywords = [
@@ -77,8 +82,8 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
         'community', 'professional', 'career', 'work', 'project', 'learning'
     ]
     if any(keyword in caption_lower for keyword in positive_keywords):
-        score -= 10
-        print(f"  [MODIFIER] Positive professional indicator: -10 → {score}")
+        score -= 5  # Reduce to -5 to avoid going too low
+        print(f"  [MODIFIER] Positive professional indicator: -5 → {score}")
     
     # === RECENCY ANALYSIS ===
     if created_at:
