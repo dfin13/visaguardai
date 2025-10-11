@@ -94,7 +94,7 @@ def analyze_instagram_posts(username, limit=5):
                 # Additional metadata
                 "owner_username": item.get("ownerUsername"),
                 "owner_full_name": item.get("ownerFullName"),
-                "followers_count": item.get("followersCount", 0),  # Profile followers
+                "followers_count": item.get("ownerFollowersCount") or item.get("followersCount"),
                 "is_sponsored": item.get("isSponsored", False),
                 "comments_disabled": item.get("isCommentsDisabled", False),
                 
@@ -147,18 +147,17 @@ def analyze_instagram_posts(username, limit=5):
         }]
 
     # ==== PROFILE ASSESSMENT ====
-    # Generate AI assessment of username/full name/followers (once per account)
+    # Generate AI assessment of username/full name (once per account)
     profile_assessment = None
     if posts_data:
         try:
             from dashboard.intelligent_analyzer import analyze_profile_identity
             owner_username = posts_data[0].get('owner_username', username)
             owner_full_name = posts_data[0].get('owner_full_name', 'Not available')
-            followers_count = posts_data[0].get('followers_count', 0)
             
             if owner_username and owner_full_name:
-                print(f"👤 Generating profile assessment for @{owner_username} ({followers_count} followers)...")
-                profile_assessment = analyze_profile_identity("Instagram", owner_username, owner_full_name, followers_count)
+                print(f"👤 Generating profile assessment for @{owner_username}...")
+                profile_assessment = analyze_profile_identity("Instagram", owner_username, owner_full_name)
         except Exception as e:
             print(f"⚠️ Profile assessment failed: {e}")
             profile_assessment = None
@@ -176,7 +175,6 @@ def analyze_instagram_posts(username, limit=5):
             results[0]['profile_assessment'] = {
                 'username': posts_data[0].get('owner_username', username),
                 'full_name': posts_data[0].get('owner_full_name', 'Not available'),
-                'followers_count': posts_data[0].get('followers_count', 0),
                 'assessment': profile_assessment
             }
         
