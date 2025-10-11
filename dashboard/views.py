@@ -863,7 +863,50 @@ def result_view(request):
     
     if not isinstance(twitter_analysis, list):
         twitter_analysis = [twitter_analysis]
-# Calculate stats
+    
+    # Sort all platforms chronologically (most recent → oldest)
+    def sort_posts_chronologically(posts):
+        """Sort posts by created_at timestamp, most recent first."""
+        if not posts or not isinstance(posts, list):
+            return posts
+        
+        def get_timestamp(post):
+            """Extract timestamp from post, handling various field names and formats."""
+            if not isinstance(post, dict):
+                return 0
+            
+            # Try different timestamp field names
+            timestamp_str = (
+                post.get('created_at') or 
+                post.get('timestamp') or 
+                post.get('created_time') or 
+                post.get('date') or 
+                post.get('postedAt') or
+                ''
+            )
+            
+            if not timestamp_str:
+                return 0
+            
+            try:
+                from dateutil import parser
+                dt = parser.parse(timestamp_str)
+                return dt.timestamp()
+            except:
+                return 0
+        
+        return sorted(posts, key=get_timestamp, reverse=True)
+    
+    # Apply chronological sorting to all platforms
+    instagram_analysis = sort_posts_chronologically(instagram_analysis)
+    facebook_analysis = sort_posts_chronologically(facebook_analysis)
+    twitter_analysis = sort_posts_chronologically(twitter_analysis)
+    
+    # LinkedIn has nested structure: {'linkedin': [posts]}
+    if isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
+        linkedin_analysis['linkedin'] = sort_posts_chronologically(linkedin_analysis['linkedin'])
+    
+    # Calculate stats
     safe_count = 0
     caution_count = 0
     warning_count = 0
@@ -890,16 +933,7 @@ def result_view(request):
         'linkedin_analysis': linkedin_analysis,
         'facebook_analysis': facebook_analysis,
       }
-    
-    try:
-        return render(request, 'dashboard/result.html', context)
-    except Exception as e:
-        import traceback
-        print(f"❌ Template rendering error: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        # Return a simple error page instead of 500
-        from django.http import HttpResponse
-        return HttpResponse(f"<html><body><h1>Template Error</h1><pre>{traceback.format_exc()}</pre></body></html>", status=500) 
+    return render(request, 'dashboard/result.html', context) 
 
 # PDF export view for dashboard results
 @login_required
