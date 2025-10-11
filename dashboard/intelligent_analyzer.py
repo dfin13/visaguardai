@@ -499,7 +499,7 @@ Examples:
 Return only one sentence, no JSON, no extra formatting."""
 
         response = client.chat.completions.create(
-            model="google/gemini-flash-1.5",
+            model="google/gemini-2.0-flash-exp:free",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
             max_tokens=80
