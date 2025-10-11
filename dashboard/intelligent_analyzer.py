@@ -75,119 +75,186 @@ def generate_profile_assessment(platform, username):
         return f"Username @{username} appears suitable for professional review."
 
 
-def calculate_realistic_risk_score(post_data, ai_score=None):
+def calculate_realistic_risk_score(post_data, ai_score=None, platform="Instagram"):
     """
-    Calculate a realistic risk score based on post features.
-    Uses incremental modifiers with better variance for realistic grade distribution.
+    Calculate a realistic risk score with platform-aware logic and better variance.
+    Uses dynamic weighting - only applies modifiers when truly relevant.
     
     Args:
         post_data: dict - Post metadata
         ai_score: int - AI-generated score (optional, used as reference)
+        platform: str - Platform name for platform-specific sensitivity
     
     Returns:
         int - Adjusted risk score (0-100)
     """
-    # Start with lower base score to allow more variance
-    # Professional/clear posts can stay low, ambiguous/risky posts increase more
-    score = 3  # Start at A (safe baseline) instead of 10
-    
-    # Extract post features
-    caption = (post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or '').strip()
-    likes = post_data.get('likes_count', 0) or 0
-    comments = post_data.get('comments_count', 0) or 0
-    created_at = post_data.get('created_at', '')
-    location = post_data.get('location_name', '')
-    hashtags = post_data.get('hashtags', []) or []
-    
-    # === CAPTION ANALYSIS ===
-    if not caption:
-        # Missing caption - ambiguous, should push to C range
-        score += 20
-        print(f"  [MODIFIER] Missing caption: +20 → {score}")
-    elif len(caption.split()) <= 3:
-        # Vague caption (1-3 words) - slight ambiguity
-        score += 12
-        print(f"  [MODIFIER] Vague caption ({len(caption.split())} words): +12 → {score}")
-    
-    # === KEYWORD ANALYSIS ===
-    caption_lower = caption.lower()
-    
-    # Alcohol/nightlife (higher risk)
-    alcohol_keywords = ['alcohol', 'beer', 'wine', 'drunk', 'party', 'nightlife', 'club', 'bar']
-    if any(keyword in caption_lower for keyword in alcohol_keywords):
-        score += 20
-        print(f"  [MODIFIER] Alcohol/nightlife content: +20 → {score}")
-    
-    # Political/controversial (moderate risk)
-    political_keywords = ['politics', 'political', 'protest', 'rally', 'demonstration']
-    if any(keyword in caption_lower for keyword in political_keywords):
-        score += 15
-        print(f"  [MODIFIER] Political/controversial content: +15 → {score}")
-    
-    # === POSITIVE INDICATORS ===
-    positive_keywords = [
-        'volunteer', 'education', 'university', 'student', 'teamwork',
-        'community', 'professional', 'career', 'work', 'project', 'learning',
-        'conference', 'achievement', 'graduation', 'certification', 'training'
-    ]
-    if any(keyword in caption_lower for keyword in positive_keywords):
-        score -= 8  # Stronger reduction for clear professional content
-        print(f"  [MODIFIER] Positive professional indicator: -8 → {score}")
-    
-    # === RECENCY ANALYSIS ===
-    if created_at:
-        try:
-            from datetime import datetime
-            post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-            days_old = (datetime.now(post_date.tzinfo) - post_date).days
-            if days_old > 730:  # >2 years
-                score += 8
-                print(f"  [MODIFIER] Old post ({days_old} days): +8 → {score}")
-        except:
-            pass
-    
-    # === ENGAGEMENT ANALYSIS ===
-    total_engagement = likes + comments
-    
-    if total_engagement == 0:
-        # No engagement data - slight concern
-        score += 7
-        print(f"  [MODIFIER] No engagement data: +7 → {score}")
-    elif total_engagement < 30:
-        # Low engagement
-        score += 5
-        print(f"  [MODIFIER] Low engagement ({total_engagement}): +5 → {score}")
-    elif total_engagement > 500:
-        # High engagement (credibility boost) - stronger reduction
-        score -= 8
-        print(f"  [MODIFIER] High engagement ({total_engagement}): -8 → {score}")
-    
-    # === CONTENT FLAGS (SEVERE) ===
-    severe_keywords = [
-        'violence', 'illegal', 'weapon', 'drug', 'hate', 'threat',
-        'extremist', 'radical', 'terrorist', 'arrest', 'fight'
-    ]
-    if any(keyword in caption_lower for keyword in severe_keywords):
-        score += 40  # Push clearly into F range
-        print(f"  [MODIFIER] Explicit severe content: +40 → {score}")
-    
-    # === LOCATION SENSITIVITY ===
-    sensitive_locations = [
-        'iran', 'syria', 'north korea', 'afghanistan', 'iraq',
-        'venezuela', 'cuba', 'russia', 'ukraine'
-    ]
-    if location:
-        location_lower = location.lower()
-        if any(loc in location_lower for loc in sensitive_locations):
+    try:
+        # Start with safe baseline
+        score = 2  # Start at A+ for truly neutral posts
+        
+        # Extract post features
+        caption = (post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or '').strip()
+        likes = post_data.get('likes_count', 0) or 0
+        comments = post_data.get('comments_count', 0) or 0
+        created_at = post_data.get('created_at', '')
+        location = post_data.get('location_name', '')
+        hashtags = post_data.get('hashtags', []) or []
+        caption_lower = caption.lower() if caption else ""
+        
+        # === RISKY ACTIVITY DETECTION (cap at B-/C+ range) ===
+        risky_activities = [
+            'cliff', 'jump', 'skydiv', 'bungee', 'extreme sport', 'base jump',
+            'nightclub', 'casino', 'gambling'
+        ]
+        political_activities = ['protest', 'rally', 'demonstration']
+        
+        has_risky_activity = any(activity in caption_lower for activity in risky_activities)
+        has_political_activity = any(activity in caption_lower for activity in political_activities)
+        
+        if has_risky_activity:
+            score = max(score, 18)  # Minimum B- (cap A-range for risky activities)
+            score += 8
+            print(f"  [MODIFIER] Risky activity detected: capped at B-/C+ range → {score}")
+        elif has_political_activity:
+            # Political activities handled separately to avoid double-counting
+            score = max(score, 15)  # Minimum B
+            score += 6
+            print(f"  [MODIFIER] Political activity detected: +6 → {score}")
+        
+        # === CAPTION ANALYSIS (smarter handling) ===
+        if not caption:
+            # Missing caption - only penalize if other context is unclear
+            # Don't auto-penalize if engagement is high or location is clear
+            if total_engagement := (likes + comments):
+                if total_engagement < 50 and not location:
+                    score += 15  # Ambiguous + low engagement
+                    print(f"  [MODIFIER] Missing caption with low context: +15 → {score}")
+                elif not location:
+                    score += 8  # Some ambiguity but has engagement
+                    print(f"  [MODIFIER] Missing caption (partial context): +8 → {score}")
+                # else: Good engagement or location present - minimal penalty
+            else:
+                score += 18  # No caption, no engagement, no location
+                print(f"  [MODIFIER] Missing caption (no context): +18 → {score}")
+        elif len(caption.split()) <= 3 and not has_risky_activity:
+            # Vague caption only matters if no risky activity already flagged
             score += 10
-            print(f"  [MODIFIER] Geopolitically sensitive location: +10 → {score}")
-    
-    # Clamp score between 0 and 100
-    score = max(0, min(100, score))
-    
-    print(f"  [FINAL] Calculated risk score: {score}")
-    
-    return score
+            print(f"  [MODIFIER] Vague caption ({len(caption.split())} words): +10 → {score}")
+        
+        # === POSITIVE INDICATORS (expanded) ===
+        positive_keywords = [
+            'volunteer', 'education', 'university', 'student', 'teamwork',
+            'community', 'professional', 'career', 'work', 'project', 'learning',
+            'conference', 'achievement', 'graduation', 'certification', 'training',
+            'scholarship', 'internship', 'research', 'mentor', 'workshop', 'seminar',
+            'degree', 'award', 'honor', 'service', 'charity', 'nonprofit'
+        ]
+        positive_count = sum(1 for keyword in positive_keywords if keyword in caption_lower)
+        if positive_count > 0:
+            reduction = min(12, positive_count * 6)  # Up to -12 for multiple indicators
+            score -= reduction
+            print(f"  [MODIFIER] Positive indicators ({positive_count}): -{reduction} → {score}")
+        
+        # === RISKY KEYWORDS (refined) ===
+        # Alcohol/nightlife (higher risk)
+        alcohol_keywords = ['alcohol', 'beer', 'wine', 'drunk', 'party', 'nightlife', 'club', 'bar', 'shots']
+        if any(keyword in caption_lower for keyword in alcohol_keywords):
+            score += 22  # Push toward D range
+            print(f"  [MODIFIER] Alcohol/nightlife content: +22 → {score}")
+        
+        # Political/controversial (moderate-high risk) - avoid double-counting with political_activity
+        political_keywords = ['politics', 'political', 'activist']
+        if any(keyword in caption_lower for keyword in political_keywords) and not has_political_activity:
+            score += 15
+            print(f"  [MODIFIER] Political/controversial content: +15 → {score}")
+        
+        # === ENGAGEMENT ANALYSIS (dynamic - only when relevant) ===
+        total_engagement = likes + comments
+        
+        # Only penalize very low engagement on older posts
+        if created_at and total_engagement < 15:
+            try:
+                from datetime import datetime
+                post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                days_old = (datetime.now(post_date.tzinfo) - post_date).days
+                if days_old > 90:  # 3+ months old with very low engagement
+                    score += 6
+                    print(f"  [MODIFIER] Old post with low engagement: +6 → {score}")
+            except:
+                pass
+        
+        # Reward exceptionally high engagement (credibility)
+        if total_engagement > 1000:
+            score -= 10
+            print(f"  [MODIFIER] Very high engagement ({total_engagement}): -10 → {score}")
+        elif total_engagement > 500:
+            score -= 6
+            print(f"  [MODIFIER] High engagement ({total_engagement}): -6 → {score}")
+        
+        # === SEVERE CONTENT FLAGS ===
+        severe_keywords = [
+            'violence', 'illegal', 'weapon', 'drug', 'hate', 'threat',
+            'extremist', 'radical', 'terrorist', 'arrest', 'fight', 'assault'
+        ]
+        if any(keyword in caption_lower for keyword in severe_keywords):
+            score += 45  # Push firmly into F range
+            print(f"  [MODIFIER] Explicit severe content: +45 → {score}")
+        
+        # === LOCATION SENSITIVITY (only truly sensitive regions) ===
+        if location:
+            location_lower = location.lower()
+            sensitive_locations = [
+                'iran', 'syria', 'north korea', 'afghanistan', 'iraq',
+                'venezuela', 'cuba', 'russia', 'ukraine', 'yemen', 'libya'
+            ]
+            if any(loc in location_lower for loc in sensitive_locations):
+                score += 12
+                print(f"  [MODIFIER] Geopolitically sensitive location: +12 → {score}")
+        
+        # === PLATFORM-SPECIFIC ADJUSTMENTS ===
+        if platform == "LinkedIn":
+            # LinkedIn: Apply higher scrutiny baseline
+            if score < 5:  # No automatic A+ on LinkedIn
+                score += 3
+                print(f"  [MODIFIER] LinkedIn baseline scrutiny: +3 → {score}")
+            
+            # Slight penalty for very casual language on LinkedIn
+            casual_indicators = ['lol', 'omg', 'lmao', 'haha', '🔥', '💯']
+            if any(indicator in caption_lower for indicator in casual_indicators):
+                score += 8
+                print(f"  [MODIFIER] Casual tone on LinkedIn: +8 → {score}")
+        
+        # === RECENCY (only for very old posts) ===
+        if created_at:
+            try:
+                from datetime import datetime
+                post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                days_old = (datetime.now(post_date.tzinfo) - post_date).days
+                if days_old > 1095:  # >3 years (very outdated)
+                    score += 10
+                    print(f"  [MODIFIER] Very old post ({days_old} days): +10 → {score}")
+            except:
+                pass
+        
+        # === VARIANCE INJECTION (prevent clustering) ===
+        # Add slight variance based on post characteristics to avoid identical scores
+        import hashlib
+        post_hash = hashlib.md5(f"{caption[:50]}{likes}{comments}".encode()).hexdigest()
+        variance = int(post_hash[:2], 16) % 3  # 0-2 points variance
+        score += variance
+        if variance > 0:
+            print(f"  [MODIFIER] Variance injection: +{variance} → {score}")
+        
+        # Clamp score between 0 and 100
+        score = max(0, min(100, score))
+        
+        print(f"  [FINAL] {platform} calculated risk score: {score}")
+        
+        return score
+        
+    except Exception as e:
+        print(f"  [ERROR] Risk scoring failed: {e}, returning default 15")
+        return 15  # Safe default (B range)
 
 
 def build_context_aware_prompt(platform, post_data):
@@ -279,6 +346,29 @@ def build_context_aware_prompt(platform, post_data):
     # Detect truly missing caption
     has_caption = bool(caption and caption.strip())
     
+    # Platform-specific scrutiny level
+    platform_guidance = ""
+    if platform == "LinkedIn":
+        platform_guidance = """
+⚠️ LINKEDIN PLATFORM NOTICE:
+This is a professional networking platform. Apply heightened scrutiny:
+• Even minor tone issues or unclear messaging should be noted
+• Casual language is less acceptable than on Instagram
+• Professional claims must appear credible and well-articulated
+• Missing context or vague posts are more concerning on LinkedIn
+• Do not assign A+ grades liberally - reserve for truly exceptional professional content
+"""
+    elif platform == "Instagram":
+        platform_guidance = """
+📸 INSTAGRAM PLATFORM NOTICE:
+This is a lifestyle/visual platform. Apply balanced assessment:
+• Allow full A-F grade range based on content appropriateness
+• Lifestyle content is expected, but assess tone and context carefully
+• Visual ambiguity (missing captions) requires careful consideration
+• Professional, educational, or community content should be recognized
+• Nightlife, parties, or risky activities warrant moderate to high scrutiny
+"""
+    
     # Build comprehensive prompt
     prompt = f"""You are a visa application coach conducting a critical review of social media content that will be scrutinized by immigration officers.
 
@@ -287,6 +377,8 @@ PLATFORM: {platform}
 POST DATA:
 {chr(10).join(f"• {part}" for part in context_parts)}
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{platform_guidance}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 YOUR ROLE:
@@ -426,9 +518,9 @@ def analyze_post_intelligent(platform, post_data, retry_count=0):
         # Parse JSON
         result = json.loads(ai_response)
         
-        # Calculate realistic risk score based on post features
+        # Calculate realistic risk score based on post features (platform-aware)
         ai_risk_score = result.get('risk_score', 50)
-        adjusted_score = calculate_realistic_risk_score(post_data, ai_risk_score)
+        adjusted_score = calculate_realistic_risk_score(post_data, ai_risk_score, platform=platform)
         
         # Override AI score with calculated score
         result['risk_score'] = adjusted_score
