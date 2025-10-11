@@ -1,7 +1,6 @@
 import json
 import re
 from django import template
-from dashboard.grading_system import risk_score_to_letter_grade, format_grade_display
 
 register = template.Library()
 
@@ -98,25 +97,105 @@ def remove_json_comments(value):
         return value
     return re.sub(r'//.*', '', value)
 
-@register.filter(name='to_letter_grade')
-def to_letter_grade(score):
-    """Convert risk score to letter grade info."""
-    if score is None or score < 0:
+@register.filter
+def letter_grade(risk_score):
+    """
+    Converts numeric risk score (0-100) to letter grade with band and emoji.
+    Returns dict with: grade, band, emoji, color
+    
+    Bands:
+    - A+/A/A- → Safe
+    - B+/B/B-/C+/C/C- → Caution
+    - D+/D/D-/F → High Risk
+    """
+    if risk_score is None:
         return {
             'grade': 'N/A',
-            'descriptor': 'Unknown',
-            'color': 'gray',
+            'band': 'Unknown',
             'emoji': '⚪',
-            'tailwind_color': 'text-gray-500',
-            'bg_color': 'bg-gray-900/20',
-            'border_color': 'border-gray-500/30',
-            'numeric_score': -1
+            'color': 'gray'
         }
-    return risk_score_to_letter_grade(score)
-
-@register.filter(name='format_grade')
-def format_grade(score):
-    """Format grade display."""
-    if score is None or score < 0:
-        return "N/A (Unknown) ⚪"
-    return format_grade_display(score)
+    
+    try:
+        score = float(risk_score)
+    except (ValueError, TypeError):
+        return {
+            'grade': 'N/A',
+            'band': 'Unknown',
+            'emoji': '⚪',
+            'color': 'gray'
+        }
+    
+    # Determine letter grade
+    if score <= 2:
+        grade = 'A+'
+        band = 'Safe'
+        emoji = '🟢'
+        color = 'green'
+    elif score <= 7:
+        grade = 'A'
+        band = 'Safe'
+        emoji = '🟢'
+        color = 'green'
+    elif score <= 9:
+        grade = 'A-'
+        band = 'Safe'
+        emoji = '🟢'
+        color = 'green'
+    elif score <= 12:
+        grade = 'B+'
+        band = 'Caution'
+        emoji = '🟠'
+        color = 'amber'
+    elif score <= 17:
+        grade = 'B'
+        band = 'Caution'
+        emoji = '🟠'
+        color = 'amber'
+    elif score <= 19:
+        grade = 'B-'
+        band = 'Caution'
+        emoji = '🟠'
+        color = 'amber'
+    elif score <= 22:
+        grade = 'C+'
+        band = 'Caution'
+        emoji = '🟠'
+        color = 'amber'
+    elif score <= 27:
+        grade = 'C'
+        band = 'Caution'
+        emoji = '🟠'
+        color = 'amber'
+    elif score <= 29:
+        grade = 'C-'
+        band = 'Caution'
+        emoji = '🟠'
+        color = 'amber'
+    elif score <= 32:
+        grade = 'D+'
+        band = 'High Risk'
+        emoji = '🔴'
+        color = 'red'
+    elif score <= 37:
+        grade = 'D'
+        band = 'High Risk'
+        emoji = '🔴'
+        color = 'red'
+    elif score <= 39:
+        grade = 'D-'
+        band = 'High Risk'
+        emoji = '🔴'
+        color = 'red'
+    else:
+        grade = 'F'
+        band = 'High Risk'
+        emoji = '🔴'
+        color = 'red'
+    
+    return {
+        'grade': grade,
+        'band': band,
+        'emoji': emoji,
+        'color': color
+    }
