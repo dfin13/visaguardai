@@ -186,72 +186,92 @@ def build_context_aware_prompt(platform, post_data, is_most_recent=False, total_
             days_old = (datetime.now(post_date.tzinfo) - post_date).days
             
             if is_most_recent:
-                context_parts.append(f"Recency: Most recent post (posted {days_old} days ago) - reflects current online presence")
+                context_parts.append(f"Recency: Most recent post (posted {days_old} days ago) - reflects current activity and online presence")
             elif days_old > 200:
-                context_parts.append(f"Recency: Posted {days_old} days ago (older content - may not reflect current professional maturity)")
+                context_parts.append(f"Recency: Posted {days_old} days ago (older content - may not reflect current professional standing)")
             # Otherwise, omit recency commentary
-        except:
+        except Exception as e:
+            # Silently skip if date parsing fails
             pass
     
     # === CONDITIONAL GEOPOLITICAL LOCATION CONTEXT ===
     # Only mention if location is geopolitically sensitive
     if location:
-        sensitive_regions = [
-            'china', 'russia', 'iran', 'north korea', 'israel', 'palestine', 
-            'ukraine', 'syria', 'afghanistan', 'iraq', 'venezuela', 'cuba',
-            'belarus', 'myanmar', 'yemen', 'lebanon', 'gaza', 'west bank'
-        ]
-        location_lower = location.lower()
-        is_sensitive = any(region in location_lower for region in sensitive_regions)
-        
-        if is_sensitive:
-            context_parts.append(f"⚠️ Location: {location} (geopolitically sensitive region - content may attract heightened scrutiny)")
-        # Otherwise, omit location commentary
+        try:
+            sensitive_regions = [
+                'china', 'russia', 'iran', 'north korea', 'israel', 'palestine', 
+                'ukraine', 'syria', 'afghanistan', 'iraq', 'venezuela', 'cuba',
+                'belarus', 'myanmar', 'yemen', 'lebanon', 'gaza', 'west bank',
+                'taiwan', 'hong kong', 'tibet', 'crimea', 'kashmir'
+            ]
+            location_lower = location.lower()
+            is_sensitive = any(region in location_lower for region in sensitive_regions)
+            
+            if is_sensitive:
+                context_parts.append(f"⚠️ Location: {location} (geopolitically sensitive region - maintain neutral tone in related content)")
+            # Otherwise, omit location commentary (normal regions like USA, Canada, France, etc.)
+        except Exception as e:
+            # Skip if location processing fails
+            pass
     
     # === CONDITIONAL ENGAGEMENT CONTEXT ===
     # Only mention if engagement is notably high or low
-    total_engagement = likes + comments + video_views
-    days_old_for_check = 30  # default
-    
-    if created_at:
-        try:
-            post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-            days_old_for_check = (datetime.now(post_date.tzinfo) - post_date).days
-        except:
-            pass
-    
-    if total_engagement > 0:
-        # Calculate engagement tier (only comment on extremes)
-        if likes > 5000 or comments > 200 or video_views > 50000:
-            context_parts.append(f"⚠️ Engagement: {likes} likes, {comments} comments, {video_views} views (EXCEPTIONALLY HIGH - highly visible content, ensure professional tone)")
-        elif likes < 10 and comments < 2 and days_old_for_check > 30:
-            context_parts.append(f"Engagement: {likes} likes, {comments} comments (limited engagement - minimal audience connection)")
-        # Otherwise, omit engagement commentary
+    try:
+        total_engagement = likes + comments + video_views
+        days_old_for_check = 30  # default
+        
+        if created_at:
+            try:
+                post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                days_old_for_check = (datetime.now(post_date.tzinfo) - post_date).days
+            except:
+                pass
+        
+        if total_engagement > 0:
+            # Calculate engagement tier (only comment on extremes)
+            if likes > 5000 or comments > 200 or video_views > 50000:
+                context_parts.append(f"⚠️ Engagement: {likes} likes, {comments} comments (strong engagement reflects community interest - ensure content aligns with professional image)")
+            elif likes < 20 and comments < 3 and days_old_for_check > 30:
+                context_parts.append(f"Engagement: {likes} likes, {comments} comments (limited engagement; low visibility, not concerning)")
+            # Otherwise, omit engagement commentary (normal range 20-5000)
+    except Exception as e:
+        # Skip if engagement processing fails
+        pass
     
     # Media context (always include)
     if media_type:
         context_parts.append(f"Media Type: {media_type}")
     
     # === CONDITIONAL HASHTAG SENSITIVITY ===
-    # Only mention if hashtags fall into sensitive categories
+    # Only mention if hashtags fall into sensitive categories (parse up to 10)
     if hashtags and len(hashtags) > 0:
-        sensitive_hashtags = {
-            'political': ['protest', 'freedom', 'justice', 'revolution', 'democracy', 'election', 'vote', 'rights', 'activism'],
-            'religious': ['faith', 'allah', 'god', 'prayfor', 'christian', 'muslim', 'islam', 'bible', 'quran', 'religious'],
-            'controversial': ['metoo', 'climatechange', 'gunrights', 'abortion', 'lgbt', 'lgbtq', 'pride', 'blacklivesmatter', 'blm']
-        }
-        
-        detected_sensitive = []
-        hashtags_lower = [h.lower().replace('#', '') for h in hashtags]
-        
-        for category, keywords in sensitive_hashtags.items():
-            for keyword in keywords:
-                if any(keyword in tag for tag in hashtags_lower):
-                    detected_sensitive.append(hashtags[hashtags_lower.index(next(tag for tag in hashtags_lower if keyword in tag))])
-        
-        if detected_sensitive:
-            context_parts.append(f"⚠️ Hashtags: {', '.join(detected_sensitive)} (politically, religiously, or ideologically charged - may attract heightened scrutiny)")
-        # Otherwise, omit hashtag commentary
+        try:
+            sensitive_hashtags = {
+                'political': ['protest', 'freedom', 'justice', 'revolution', 'democracy', 'election', 'vote', 'rights', 'activism', 'resistance', 'solidarity'],
+                'religious': ['faith', 'allah', 'god', 'prayfor', 'christian', 'muslim', 'islam', 'bible', 'quran', 'religious', 'blessed', 'prayer'],
+                'controversial': ['metoo', 'climatechange', 'gunrights', 'abortion', 'lgbt', 'lgbtq', 'pride', 'blacklivesmatter', 'blm', 'feminist', 'prochoice', 'prolife']
+            }
+            
+            # Limit to first 10 hashtags for performance
+            hashtags_to_check = hashtags[:10]
+            detected_sensitive = []
+            hashtags_lower = [h.lower().replace('#', '') for h in hashtags_to_check]
+            
+            for category, keywords in sensitive_hashtags.items():
+                for keyword in keywords:
+                    for i, tag in enumerate(hashtags_lower):
+                        if keyword in tag and hashtags_to_check[i] not in detected_sensitive:
+                            detected_sensitive.append(hashtags_to_check[i])
+                            break  # Only add once per hashtag
+            
+            if detected_sensitive:
+                # Show up to 3 examples
+                examples = ', '.join(detected_sensitive[:3])
+                context_parts.append(f"⚠️ Hashtags: {examples} (potentially sensitive - avoid political or ideological alignment)")
+            # Otherwise, omit hashtag commentary (all neutral hashtags)
+        except Exception as e:
+            # Skip if hashtag processing fails
+            pass
     
     # Mentions (only if present)
     if mentions and len(mentions) > 0:
@@ -448,61 +468,54 @@ def analyze_post_intelligent(platform, post_data, retry_count=0, is_most_recent=
         }
 
 
-def analyze_profile_identity(platform, username, full_name, followers_count=0):
+def analyze_profile_identity(platform, username, full_name):
     """
-    Generate a brief AI assessment of username, full name, and follower count professionalism.
+    Generate a brief AI assessment of username and full name professionalism.
     Only called once per platform account.
     
     Args:
         platform: str - Platform name
         username: str - Account username
         full_name: str - Account full name
-        followers_count: int - Number of followers
     
     Returns:
-        str - Brief 1-2 sentence assessment
+        str - Brief one-sentence assessment
     """
     try:
         client = get_ai_client()
         
-        # Format follower count for readability
-        if followers_count >= 1000000:
-            followers_display = f"{followers_count / 1000000:.1f}M"
-        elif followers_count >= 1000:
-            followers_display = f"{followers_count / 1000:.1f}k"
-        else:
-            followers_display = str(followers_count)
-        
-        prompt = f"""You are an expert visa application reviewer. Briefly assess the professionalism and credibility of this {platform} profile for visa review purposes.
+        prompt = f"""You are an expert visa application reviewer. Evaluate this {platform} username and full name for professionalism and credibility in a visa review context.
 
-Username: {username}
+Username: @{username}
 Full Name: {full_name}
-Followers: {followers_display} ({followers_count} followers)
 
-Provide concise feedback on:
-• The username (is it formal, casual, or unprofessional?)
-• The full name (does it appear authentic or pseudonymous?)
-• The follower count (high, average, or low — and what it implies)
+Respond with ONE CONCISE SENTENCE evaluating the username and name professionalism.
 
-Example: "Username @alextravels is casual but not inappropriate; full name Alexander Smith adds credibility. Follower count of 1.2k suggests moderate visibility without influencer-level exposure."
+Examples:
+- "Username @johndoe aligns with a formal identity suitable for visa review."
+- "Username @sunsetking appears casual but acceptable for professional use."
+- "Username and name appear authentic and appropriate for professional contexts."
 
-Return only one concise sentence (no JSON, no formatting)."""
+Return only one sentence, no JSON, no extra formatting."""
 
         response = client.chat.completions.create(
             model="google/gemini-flash-1.5",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=150
+            temperature=0.5,
+            max_tokens=80
         )
         
         assessment = response.choices[0].message.content.strip()
-        print(f"✅ {platform} profile assessment generated: {assessment[:60]}...")
+        # Clean up any extra formatting
+        assessment = assessment.replace('"', '').replace("'", "")
+        print(f"✅ {platform} profile assessment: {assessment[:60]}...")
         
         return assessment
         
     except Exception as e:
         print(f"❌ Profile assessment failed: {e}")
-        return f"Username @{username}, full name '{full_name}', and {followers_display} followers provided for review."
+        # Clean fallback
+        return f"Username @{username} appears casual but acceptable for professional use."
 
 
 def analyze_posts_batch(platform, posts_data_list):
