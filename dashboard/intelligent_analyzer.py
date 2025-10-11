@@ -448,15 +448,16 @@ def analyze_post_intelligent(platform, post_data, retry_count=0, is_most_recent=
         }
 
 
-def analyze_profile_identity(platform, username, full_name):
+def analyze_profile_identity(platform, username, full_name, followers_count=0):
     """
-    Generate a brief AI assessment of username and full name professionalism.
+    Generate a brief AI assessment of username, full name, and follower count professionalism.
     Only called once per platform account.
     
     Args:
         platform: str - Platform name
         username: str - Account username
         full_name: str - Account full name
+        followers_count: int - Number of followers
     
     Returns:
         str - Brief 1-2 sentence assessment
@@ -464,25 +465,34 @@ def analyze_profile_identity(platform, username, full_name):
     try:
         client = get_ai_client()
         
-        prompt = f"""You are an expert visa application reviewer. Evaluate this {platform} profile identity for professionalism and perceived credibility in a visa review context.
+        # Format follower count for readability
+        if followers_count >= 1000000:
+            followers_display = f"{followers_count / 1000000:.1f}M"
+        elif followers_count >= 1000:
+            followers_display = f"{followers_count / 1000:.1f}k"
+        else:
+            followers_display = str(followers_count)
+        
+        prompt = f"""You are an expert visa application reviewer. Briefly assess the professionalism and credibility of this {platform} profile for visa review purposes.
 
 Username: {username}
 Full Name: {full_name}
+Followers: {followers_display} ({followers_count} followers)
 
-Provide a brief 1-2 sentence assessment of how this identity appears from a professional/visa review perspective. Be constructive and balanced.
+Provide concise feedback on:
+• The username (is it formal, casual, or unprofessional?)
+• The full name (does it appear authentic or pseudonymous?)
+• The follower count (high, average, or low — and what it implies)
 
-Examples:
-- "Username @johndoe aligns with a formal identity suitable for visa review."
-- "Username @sunsetking appears casual but not inappropriate for professional contexts."
-- "Full name and username appear authentic and professionally appropriate."
+Example: "Username @alextravels is casual but not inappropriate; full name Alexander Smith adds credibility. Follower count of 1.2k suggests moderate visibility without influencer-level exposure."
 
-Return only the assessment text (no JSON, no formatting, just 1-2 sentences)."""
+Return only one concise sentence (no JSON, no formatting)."""
 
         response = client.chat.completions.create(
             model="google/gemini-flash-1.5",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
-            max_tokens=100
+            temperature=0.6,
+            max_tokens=150
         )
         
         assessment = response.choices[0].message.content.strip()
@@ -492,7 +502,7 @@ Return only the assessment text (no JSON, no formatting, just 1-2 sentences)."""
         
     except Exception as e:
         print(f"❌ Profile assessment failed: {e}")
-        return f"Username @{username} and full name '{full_name}' provided for review."
+        return f"Username @{username}, full name '{full_name}', and {followers_display} followers provided for review."
 
 
 def analyze_posts_batch(platform, posts_data_list):
