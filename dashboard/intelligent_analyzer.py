@@ -386,40 +386,46 @@ Assess this post as an immigration officer would: skeptical, detail-oriented, an
 
 ANALYSIS REQUIREMENTS:
 
-1. **Content Reinforcement** — What strengthens this applicant's profile?
-   • Identify career indicators, professional language, educational references
-   • Note community involvement, stable relationships, cultural engagement
-   • Cite specific phrases, hashtags, or themes that demonstrate responsibility
-   • {'If caption is missing, assess what information gap this creates and how it weakens the post' if not has_caption else 'Quote exact wording that supports the applicant'}
+1. **Content Strength** (What enhances credibility and demonstrates positive qualities?)
+   • Identify professionalism, initiative, community impact, educational pursuits
+   • Note career milestones, volunteer work, skill development, cultural enrichment
+   • Cite specific language showing responsibility, authenticity, and stable connections
+   • {'Assess how missing context weakens credibility and professional presentation' if not has_caption else 'Quote exact phrases demonstrating positive qualities'}
+   • Use varied language: "demonstrates initiative," "shows community engagement," "reflects professional growth"
 
-2. **Content Suppression** — What could raise concerns or be misinterpreted?
-   • Flag ambiguous language, casual tone in serious contexts, or party culture references
-   • Identify keywords related to alcohol, nightlife, political topics, or controversial hashtags
-   • {'Note absence of explanatory text and resulting ambiguity' if not has_caption else 'Quote phrases that could be read negatively'}
-   • Only mention location if geopolitically sensitive (e.g., Iran, Syria, disputed regions)
-   • Only mention engagement if unusually high (possible influencer) or suspiciously low
+2. **Content Concern** (What ambiguities, tone issues, or context gaps could raise questions?)
+   • Flag unclear messaging, casual tone in professional contexts, or lifestyle red flags
+   • Note vague captions, party culture references, or ambiguous visual context
+   • {'Note absence of explanatory detail and how it creates uncertainty about post purpose' if not has_caption else 'Quote phrases that lack clarity or could be misinterpreted'}
+   • Only mention location if geopolitically sensitive or raises cultural questions
+   • Only mention engagement if pattern suggests influencer activity or unusually low visibility
+   • Avoid generic "Moderate Risk" - use "Limited clarity," "Some ambiguity," "Minor concern," "Mostly clear"
 
-3. **Content Flag** — Does this post present serious immigration risk?
-   • Identify explicit red flags: violence, illegal activity, hate speech, security threats
-   • Detect cultural insensitivity, references to overstaying, or deceptive behavior
-   • {'Warn that lack of context increases scrutiny risk' if not has_caption else 'Cite specific content that triggers concern'}
-   • If safe, briefly explain why (e.g., "professional tone," "educational focus")
+3. **Content Risk** (Does this post present serious immigration, legal, cultural, or safety concerns?)
+   • Identify explicit external risks: political involvement, legal issues, security threats, cultural insensitivity
+   • Detect references to violence, illegal activity, hate speech, overstaying, deceptive behavior
+   • {'Warn that missing context prevents risk assessment and may trigger additional scrutiny' if not has_caption else 'Cite specific content triggering concern'}
+   • If safe, concisely explain: "No significant external risks detected," "Content appears immigration-neutral"
+   • Focus on serious factors only - benign lifestyle posts (cliff jumping, travel) are not high-risk unless combined with other flags
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CRITICAL RULES:
 
 ✅ ALWAYS CITE: Quote caption phrases, mention hashtags by name, reference specific engagement numbers or locations
-✅ VARY LANGUAGE: Use different phrasing for each post (avoid "lack of caption," "maintain positive content," "continue posting")
-✅ BE CRITICAL: Act as a skeptical reviewer, not a cheerleader
-✅ ONLY FLAG RELEVANT DETAILS: Don't mention timing unless post is very old (>1 year), don't mention location unless sensitive
+✅ USE AUDIT LANGUAGE: Write like a formal visa risk audit - concise, credible, context-aware
+✅ VARY VOCABULARY: Avoid repetitive "Moderate Risk" - use "Limited clarity," "Some concern," "Mostly safe," "Minor ambiguity"
+✅ BE BALANCED: Recognize positive aspects while noting concerns (not just critical)
+✅ BE SELECTIVE: Only flag truly relevant details (very old posts, sensitive locations, unusual engagement)
 ✅ DETECT CAPTION PRESENCE: {'This post has NO caption — address the information gap' if not has_caption else 'Caption is present — analyze its content'}
+✅ BENIGN ACTIVITIES: Cliff jumping, travel adventures → moderate concern (C+/B-), not high risk unless other flags present
 
 ❌ NEVER:
+• Use jargon like "suppression" or "reinforcement" in responses
 • Use generic phrases like "professional content" without examples
-• Mention "sidecar," "carousel," or technical media types
-• Repeat the same language across multiple posts
-• Comment on normal engagement or neutral locations
+• Mention technical terms ("sidecar," "carousel")
+• Repeat identical language across posts
+• Over-penalize benign lifestyle or creative posts
 • Leave any JSON field empty
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -443,22 +449,22 @@ Instead of "professional content," try:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (keep existing field names for compatibility):
 {{
   "content_reinforcement": {{
     "status": "Safe|Positive|Needs Improvement",
-    "reason": "<Critical assessment citing specific caption quotes, hashtags, or engagement data>",
-    "recommendation": "<Actionable advice referencing this post's specific elements>"
+    "reason": "<CONTENT STRENGTH: What enhances credibility? Cite specific positive qualities, professional language, or community impact>",
+    "recommendation": "<How to strengthen profile further with specific, actionable advice>"
   }},
   "content_suppression": {{
     "status": "Safe|Caution|Risky",
-    "reason": "<Identify ambiguities, risky keywords, or concerning themes with examples>",
-    "recommendation": "<How to clarify or mitigate specific risks found>"
+    "reason": "<CONTENT CONCERN: What ambiguities or tone issues exist? Use varied language: 'Limited clarity,' 'Some ambiguity,' 'Minor concern,' 'Mostly clear'>",
+    "recommendation": "<How to improve clarity or reduce potential misinterpretation>"
   }},
   "content_flag": {{
     "status": "Safe|Sensitive|High-Risk",
-    "reason": "<Flag serious red flags or explain why post is immigration-safe>",
-    "recommendation": "<Address critical issues or suggest profile strengthening>"
+    "reason": "<CONTENT RISK: Serious external concerns only (political, legal, cultural, safety). If safe: 'No significant external risks detected' or 'Immigration-neutral content'>",
+    "recommendation": "<Address serious issues or suggest broader profile improvements>"
   }},
   "risk_score": <0-100 integer>
 }}
