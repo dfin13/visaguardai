@@ -141,23 +141,16 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
     return score
 
 
-def build_context_aware_prompt(platform, post_data):
+def build_context_aware_prompt(platform, post_data, is_most_recent=False, total_posts=1):
     """
-    Build an intelligent, context-rich prompt for AI analysis.
+    Build an intelligent, context-rich prompt for AI analysis with conditional commentary.
+    Only mentions notable factors (engagement extremes, sensitive hashtags, geopolitical locations, etc.)
     
     Args:
         platform: str - Platform name (Instagram, LinkedIn, Twitter, Facebook)
-        post_data: dict - Rich post metadata including:
-            - caption/text
-            - post_id
-            - created_at
-            - location_name
-            - likes_count
-            - comments_count
-            - type (Image/Video/Sidecar)
-            - hashtags
-            - mentions
-            - is_sponsored
+        post_data: dict - Rich post metadata
+        is_most_recent: bool - Whether this is the most recent post
+        total_posts: int - Total number of posts being analyzed
     
     Returns:
         str - Comprehensive prompt for AI
@@ -170,6 +163,7 @@ def build_context_aware_prompt(platform, post_data):
     location = post_data.get('location_name') or post_data.get('location')
     likes = post_data.get('likes_count') or post_data.get('likesCount') or 0
     comments = post_data.get('comments_count') or post_data.get('commentsCount') or 0
+    video_views = post_data.get('video_view_count') or post_data.get('videoViewCount') or 0
     media_type = post_data.get('type') or "text"
     hashtags = post_data.get('hashtags') or []
     mentions = post_data.get('mentions') or []
@@ -184,50 +178,86 @@ def build_context_aware_prompt(platform, post_data):
     else:
         context_parts.append("Content: [NO CAPTION PROVIDED - Post lacks textual context]")
     
-    # Temporal context
+    # === CONDITIONAL TEMPORAL CONTEXT ===
+    # Only mention if most recent OR older than 200 days
     if created_at:
         try:
             post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
             days_old = (datetime.now(post_date.tzinfo) - post_date).days
-            if days_old < 7:
-                context_parts.append(f"Recency: Posted {days_old} days ago (very recent)")
-            elif days_old < 30:
-                context_parts.append(f"Recency: Posted {days_old} days ago (recent)")
-            elif days_old < 180:
-                context_parts.append(f"Recency: Posted {days_old} days ago ({days_old//30} months)")
-            else:
-                context_parts.append(f"Recency: Posted {days_old} days ago (older content)")
+            
+            if is_most_recent:
+                context_parts.append(f"Recency: Most recent post (posted {days_old} days ago) - reflects current online presence")
+            elif days_old > 200:
+                context_parts.append(f"Recency: Posted {days_old} days ago (older content - may not reflect current professional maturity)")
+            # Otherwise, omit recency commentary
         except:
-            context_parts.append("Recency: Unknown")
+            pass
     
-    # Geographic context
+    # === CONDITIONAL GEOPOLITICAL LOCATION CONTEXT ===
+    # Only mention if location is geopolitically sensitive
     if location:
-        context_parts.append(f"Location: {location}")
+        sensitive_regions = [
+            'china', 'russia', 'iran', 'north korea', 'israel', 'palestine', 
+            'ukraine', 'syria', 'afghanistan', 'iraq', 'venezuela', 'cuba',
+            'belarus', 'myanmar', 'yemen', 'lebanon', 'gaza', 'west bank'
+        ]
+        location_lower = location.lower()
+        is_sensitive = any(region in location_lower for region in sensitive_regions)
+        
+        if is_sensitive:
+            context_parts.append(f"⚠️ Location: {location} (geopolitically sensitive region - content may attract heightened scrutiny)")
+        # Otherwise, omit location commentary
     
-    # Engagement context
-    if likes or comments:
-        engagement_note = f"Engagement: {likes} likes, {comments} comments"
-        if likes > 1000:
-            engagement_note += " (high visibility)"
-        elif likes > 100:
-            engagement_note += " (moderate visibility)"
-        else:
-            engagement_note += " (low visibility)"
-        context_parts.append(engagement_note)
+    # === CONDITIONAL ENGAGEMENT CONTEXT ===
+    # Only mention if engagement is notably high or low
+    total_engagement = likes + comments + video_views
+    days_old_for_check = 30  # default
     
-    # Media context
+    if created_at:
+        try:
+            post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            days_old_for_check = (datetime.now(post_date.tzinfo) - post_date).days
+        except:
+            pass
+    
+    if total_engagement > 0:
+        # Calculate engagement tier (only comment on extremes)
+        if likes > 5000 or comments > 200 or video_views > 50000:
+            context_parts.append(f"⚠️ Engagement: {likes} likes, {comments} comments, {video_views} views (EXCEPTIONALLY HIGH - highly visible content, ensure professional tone)")
+        elif likes < 10 and comments < 2 and days_old_for_check > 30:
+            context_parts.append(f"Engagement: {likes} likes, {comments} comments (limited engagement - minimal audience connection)")
+        # Otherwise, omit engagement commentary
+    
+    # Media context (always include)
     if media_type:
         context_parts.append(f"Media Type: {media_type}")
     
-    # Hashtags
+    # === CONDITIONAL HASHTAG SENSITIVITY ===
+    # Only mention if hashtags fall into sensitive categories
     if hashtags and len(hashtags) > 0:
-        context_parts.append(f"Hashtags: {', '.join(hashtags[:5])}")
+        sensitive_hashtags = {
+            'political': ['protest', 'freedom', 'justice', 'revolution', 'democracy', 'election', 'vote', 'rights', 'activism'],
+            'religious': ['faith', 'allah', 'god', 'prayfor', 'christian', 'muslim', 'islam', 'bible', 'quran', 'religious'],
+            'controversial': ['metoo', 'climatechange', 'gunrights', 'abortion', 'lgbt', 'lgbtq', 'pride', 'blacklivesmatter', 'blm']
+        }
+        
+        detected_sensitive = []
+        hashtags_lower = [h.lower().replace('#', '') for h in hashtags]
+        
+        for category, keywords in sensitive_hashtags.items():
+            for keyword in keywords:
+                if any(keyword in tag for tag in hashtags_lower):
+                    detected_sensitive.append(hashtags[hashtags_lower.index(next(tag for tag in hashtags_lower if keyword in tag))])
+        
+        if detected_sensitive:
+            context_parts.append(f"⚠️ Hashtags: {', '.join(detected_sensitive)} (politically, religiously, or ideologically charged - may attract heightened scrutiny)")
+        # Otherwise, omit hashtag commentary
     
-    # Mentions
+    # Mentions (only if present)
     if mentions and len(mentions) > 0:
         context_parts.append(f"Mentions: {', '.join(mentions[:5])}")
     
-    # Sponsored content
+    # Sponsored content flag
     if is_sponsored:
         context_parts.append("⚠️ This is sponsored/promotional content")
     
@@ -250,10 +280,15 @@ Provide a nuanced, context-aware analysis of this specific post for a visa appli
 3. **Content Flag**: Are there any high-risk elements that could jeopardize a visa application (violence, illegal activities, hate speech, security threats, false information)?
 
 CRITICAL INSTRUCTIONS:
-- **BE SPECIFIC**: Reference the actual content, location, engagement, and context in your reasoning
+- **BE SPECIFIC**: Reference the actual content in your reasoning
 - **NO GENERIC RESPONSES**: Every reason and recommendation must be tailored to THIS post
+- **USE DISCRETION**: Only comment on factors when they are NOTABLE
+  • Only mention engagement if unusually high or low (see context above)
+  • Only comment on location if it's geopolitically sensitive (see context above)
+  • Only mention hashtags if politically/ideologically charged (see context above)
+  • Only mention post age if flagged in context (most recent or >200 days old)
 - **BE HELPFUL**: Provide actionable, constructive advice
-- **CONSIDER GEOPOLITICS**: If location is in a sensitive region, mention it
+- **AVOID REDUNDANCY**: Do not repeat generic statements about engagement, location, or timing unless they truly matter
 - **MISSING DATA**: If caption is missing, explicitly note the risk of ambiguity
 - **TONE MATTERS**: Assess if content is professional, casual, political, celebratory, etc.
 - **CULTURAL SENSITIVITY**: Consider how immigration officers from different backgrounds might interpret this
@@ -284,7 +319,7 @@ NEVER leave fields empty or null. If the post is entirely safe, still provide sp
     return prompt
 
 
-def analyze_post_intelligent(platform, post_data, retry_count=0):
+def analyze_post_intelligent(platform, post_data, retry_count=0, is_most_recent=False, total_posts=1):
     """
     Analyze a single post with intelligent, context-aware AI.
     
@@ -292,13 +327,15 @@ def analyze_post_intelligent(platform, post_data, retry_count=0):
         platform: str - Platform name
         post_data: dict - Rich post metadata
         retry_count: int - Number of retries attempted
+        is_most_recent: bool - Whether this is the most recent post
+        total_posts: int - Total number of posts being analyzed
     
     Returns:
         dict - Analysis result with content_reinforcement, content_suppression, content_flag
     """
     try:
         client = get_ai_client()
-        prompt = build_context_aware_prompt(platform, post_data)
+        prompt = build_context_aware_prompt(platform, post_data, is_most_recent=is_most_recent, total_posts=total_posts)
         
         # Log analysis (privacy-safe)
         caption_preview = (post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or "")[:60]
@@ -411,6 +448,53 @@ def analyze_post_intelligent(platform, post_data, retry_count=0):
         }
 
 
+def analyze_profile_identity(platform, username, full_name):
+    """
+    Generate a brief AI assessment of username and full name professionalism.
+    Only called once per platform account.
+    
+    Args:
+        platform: str - Platform name
+        username: str - Account username
+        full_name: str - Account full name
+    
+    Returns:
+        str - Brief 1-2 sentence assessment
+    """
+    try:
+        client = get_ai_client()
+        
+        prompt = f"""You are an expert visa application reviewer. Evaluate this {platform} profile identity for professionalism and perceived credibility in a visa review context.
+
+Username: {username}
+Full Name: {full_name}
+
+Provide a brief 1-2 sentence assessment of how this identity appears from a professional/visa review perspective. Be constructive and balanced.
+
+Examples:
+- "Username @johndoe aligns with a formal identity suitable for visa review."
+- "Username @sunsetking appears casual but not inappropriate for professional contexts."
+- "Full name and username appear authentic and professionally appropriate."
+
+Return only the assessment text (no JSON, no formatting, just 1-2 sentences)."""
+
+        response = client.chat.completions.create(
+            model="google/gemini-flash-1.5",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_tokens=100
+        )
+        
+        assessment = response.choices[0].message.content.strip()
+        print(f"✅ {platform} profile assessment generated: {assessment[:60]}...")
+        
+        return assessment
+        
+    except Exception as e:
+        print(f"❌ Profile assessment failed: {e}")
+        return f"Username @{username} and full name '{full_name}' provided for review."
+
+
 def analyze_posts_batch(platform, posts_data_list):
     """
     Analyze multiple posts for a platform.
@@ -423,11 +507,15 @@ def analyze_posts_batch(platform, posts_data_list):
         list - List of analyzed posts with full post_data and analysis
     """
     results = []
+    total_posts = len(posts_data_list)
     
     for i, post_data in enumerate(posts_data_list):
-        print(f"\n📊 Analyzing {platform} post {i+1}/{len(posts_data_list)}...")
+        print(f"\n📊 Analyzing {platform} post {i+1}/{total_posts}...")
         
-        analysis = analyze_post_intelligent(platform, post_data)
+        # Determine if this is the most recent post (first in list)
+        is_most_recent = (i == 0)
+        
+        analysis = analyze_post_intelligent(platform, post_data, is_most_recent=is_most_recent, total_posts=total_posts)
         
         # Wrap analysis in platform key (preserve exact casing for consistency)
         # Use the platform name as-is to ensure template compatibility

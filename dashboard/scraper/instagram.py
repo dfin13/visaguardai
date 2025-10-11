@@ -109,13 +109,8 @@ def analyze_instagram_posts(username, limit=5):
                 posts_text_only.append(caption)
         
         print(f"✅ Scraped {len(posts_data)} Instagram posts")
-        
-        # Sort posts chronologically (most recent first)
-        posts_data.sort(key=lambda x: x.get('created_at') or '', reverse=True)
-        print(f"📅 Sorted posts chronologically (most recent first)")
-        
         if posts_data:
-            print(f"   Most recent post: ID={posts_data[0]['post_id']}, Type={posts_data[0]['type']}, Timestamp={posts_data[0]['created_at']}")
+            print(f"   First post: ID={posts_data[0]['post_id']}, Type={posts_data[0]['type']}, Timestamp={posts_data[0]['created_at']}")
         
         # Check if account is accessible
         is_accessible, result = check_scraping_result(posts_text_only, "Instagram", username)
@@ -150,6 +145,22 @@ def analyze_instagram_posts(username, limit=5):
             }
         }]
 
+    # ==== PROFILE ASSESSMENT ====
+    # Generate AI assessment of username/full name (once per account)
+    profile_assessment = None
+    if posts_data:
+        try:
+            from dashboard.intelligent_analyzer import analyze_profile_identity
+            owner_username = posts_data[0].get('owner_username', username)
+            owner_full_name = posts_data[0].get('owner_full_name', 'Not available')
+            
+            if owner_username and owner_full_name:
+                print(f"👤 Generating profile assessment for @{owner_username}...")
+                profile_assessment = analyze_profile_identity("Instagram", owner_username, owner_full_name)
+        except Exception as e:
+            print(f"⚠️ Profile assessment failed: {e}")
+            profile_assessment = None
+    
     # ==== INTELLIGENT AI ANALYSIS ====
     print(f"🤖 Starting intelligent analysis for {len(posts_data)} Instagram posts...")
     
@@ -157,6 +168,15 @@ def analyze_instagram_posts(username, limit=5):
     
     try:
         results = analyze_posts_batch("Instagram", posts_data)
+        
+        # Add profile assessment to results (attach to first post)
+        if profile_assessment and results:
+            results[0]['profile_assessment'] = {
+                'username': posts_data[0].get('owner_username', username),
+                'full_name': posts_data[0].get('owner_full_name', 'Not available'),
+                'assessment': profile_assessment
+            }
+        
         print(f"✅ Instagram intelligent analysis complete: {len(results)} posts analyzed")
         return results
     except Exception as e:
