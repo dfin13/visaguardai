@@ -28,14 +28,14 @@ def get_ai_client():
     )
 
 
-def generate_profile_assessment(platform, username, full_name):
+def generate_profile_assessment(platform, username):
     """
-    Generate a concise AI assessment of username and full name professionalism.
+    Generate a concise AI assessment of username professionalism.
+    Focuses only on the username/handle, not the full name.
     
     Args:
         platform: str - Platform name (Instagram, LinkedIn, Facebook, X)
         username: str - Account username/handle
-        full_name: str - Account full name
     
     Returns:
         str - One-sentence professionalism assessment
@@ -43,14 +43,14 @@ def generate_profile_assessment(platform, username, full_name):
     try:
         client = get_ai_client()
         
-        prompt = f"""Evaluate the username @{username} and name '{full_name}' for professionalism and credibility in a visa review context. Respond with one concise sentence (max 25 words) assessing whether the username and name appear professional, authentic, and suitable for immigration review."""
+        prompt = f"""Evaluate the {platform} username @{username} for professionalism and credibility in a visa review context. Assess whether the username appears real, appropriate, and credible (e.g., uses full name, professional terms) or contains concerning elements (numbers, slang, inappropriate terms). Respond with one concise sentence (max 25 words)."""
         
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a visa application reviewer. Provide brief, professional assessments of usernames and names."
+                    "content": "You are a visa application reviewer. Assess usernames for professionalism, authenticity, and appropriateness. Focus on whether the username looks real vs fake, professional vs casual, appropriate vs concerning."
                 },
                 {
                     "role": "user",
@@ -65,14 +65,14 @@ def generate_profile_assessment(platform, username, full_name):
         # Clean any quotes or extra formatting
         assessment = assessment.strip('"').strip("'")
         
-        print(f"✅ {platform} profile assessment: {assessment[:60]}...")
+        print(f"✅ {platform} username assessment: {assessment[:60]}...")
         
         return assessment
         
     except Exception as e:
-        print(f"❌ Profile assessment failed for {platform}: {e}")
+        print(f"❌ Username assessment failed for {platform}: {e}")
         # Return a neutral fallback
-        return f"Username @{username} and name appear suitable for professional review."
+        return f"Username @{username} appears suitable for professional review."
 
 
 def calculate_realistic_risk_score(post_data, ai_score=None):

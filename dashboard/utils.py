@@ -117,14 +117,6 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     from .scraper.facebook import analyze_facebook_posts
     from .intelligent_analyzer import generate_profile_assessment
     from django.core.cache import cache
-    from django.contrib.auth.models import User
-    
-    # Get user's full name for profile assessments
-    try:
-        user = User.objects.get(id=user_id)
-        full_name = f"{user.first_name} {user.last_name}".strip() or "User"
-    except:
-        full_name = "User"
     
     results = {}
     # Instagram - Process with detailed progress stages
@@ -152,14 +144,23 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
             time.sleep(2)  # 2 second delay to show progress
             
             results['instagram'] = analyze_instagram_posts(instagram_username)
-            # Generate profile assessment
-            profile_assessment = generate_profile_assessment("Instagram", instagram_username, full_name)
+            
+            # Extract full name from scraped Instagram data (first post)
+            scraped_full_name = "User"
+            if results['instagram'] and len(results['instagram']) > 0:
+                first_post = results['instagram'][0]
+                if 'owner_full_name' in first_post:
+                    scraped_full_name = first_post['owner_full_name'] or "User"
+            
+            # Generate profile assessment (username only)
+            profile_assessment = generate_profile_assessment("Instagram", instagram_username)
             results['instagram_profile'] = {
                 'username': instagram_username,
-                'full_name': full_name,
+                'full_name': scraped_full_name,
                 'assessment': profile_assessment
             }
             print(f"DEBUG: Instagram analysis result: {results['instagram']}")
+            print(f"DEBUG: Instagram profile: @{instagram_username}, Name: {scraped_full_name}")
         else:
             results['instagram'] = []
     except Exception as e:
@@ -195,14 +196,28 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     try:
         if twitter_username:
             results['twitter'] = analyze_twitter_profile(twitter_username)
-            # Generate profile assessment
-            profile_assessment = generate_profile_assessment("X", twitter_username, full_name)
+            
+            # Extract full name from scraped Twitter data (first post)
+            scraped_full_name = "User"
+            if results['twitter'] and len(results['twitter']) > 0:
+                first_post = results['twitter'][0]
+                # Try various field names for Twitter profile name
+                scraped_full_name = (
+                    first_post.get('author_name') or 
+                    first_post.get('user_name') or 
+                    first_post.get('profile_name') or 
+                    "User"
+                )
+            
+            # Generate profile assessment (username only)
+            profile_assessment = generate_profile_assessment("X", twitter_username)
             results['twitter_profile'] = {
                 'username': twitter_username,
-                'full_name': full_name,
+                'full_name': scraped_full_name,
                 'assessment': profile_assessment
             }
             print(f"DEBUG: Twitter analysis result: {results['twitter']}")
+            print(f"DEBUG: Twitter profile: @{twitter_username}, Name: {scraped_full_name}")
         else:
             results['twitter'] = []
     except Exception as e:
@@ -247,14 +262,31 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     try:
         if facebook_username:
             results['facebook'] = analyze_facebook_posts(facebook_username, limit=5, user_id=user_id)
-            # Generate profile assessment
-            profile_assessment = generate_profile_assessment("Facebook", facebook_username, full_name)
+            
+            # Extract full name from scraped Facebook data
+            scraped_full_name = "User"
+            if results['facebook'] and isinstance(results['facebook'], dict) and 'facebook' in results['facebook']:
+                fb_posts = results['facebook']['facebook']
+                if fb_posts and len(fb_posts) > 0:
+                    first_post = fb_posts[0]
+                    # Try various field names for Facebook profile name
+                    scraped_full_name = (
+                        first_post.get('author_name') or 
+                        first_post.get('user_name') or 
+                        first_post.get('profile_name') or 
+                        first_post.get('owner_full_name') or
+                        "User"
+                    )
+            
+            # Generate profile assessment (username only)
+            profile_assessment = generate_profile_assessment("Facebook", facebook_username)
             results['facebook_profile'] = {
                 'username': facebook_username,
-                'full_name': full_name,
+                'full_name': scraped_full_name,
                 'assessment': profile_assessment
             }
             print(f"DEBUG: Facebook analysis result: {results['facebook']}")
+            print(f"DEBUG: Facebook profile: {facebook_username}, Name: {scraped_full_name}")
             print(f"DEBUG: Facebook data before caching: {results['facebook']}")
         else:
             results['facebook'] = []

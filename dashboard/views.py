@@ -358,15 +358,30 @@ def start_analysis(request):
                 linkedin_result = analyze_linkedin_profile(linkedin_username, limit=3)
                 cache.set(f'linkedin_analysis_{request.user.id}', linkedin_result, timeout=60*60)
                 
-                # Generate profile assessment
-                full_name = f"{request.user.first_name} {request.user.last_name}".strip() or "User"
-                profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username, full_name)
+                # Extract full name from scraped LinkedIn data
+                scraped_full_name = "User"
+                if linkedin_result and isinstance(linkedin_result, dict) and 'linkedin' in linkedin_result:
+                    linkedin_posts = linkedin_result['linkedin']
+                    if linkedin_posts and len(linkedin_posts) > 0:
+                        first_post = linkedin_posts[0]
+                        # Try various field names for LinkedIn profile name
+                        scraped_full_name = (
+                            first_post.get('author_name') or 
+                            first_post.get('user_name') or 
+                            first_post.get('profile_name') or 
+                            first_post.get('owner_full_name') or
+                            "User"
+                        )
+                
+                # Generate profile assessment (username only)
+                profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username)
                 linkedin_profile = {
                     'username': linkedin_username,
-                    'full_name': full_name,
+                    'full_name': scraped_full_name,
                     'assessment': profile_assessment
                 }
                 cache.set(f'linkedin_profile_{request.user.id}', linkedin_profile, timeout=60*60)
+                print(f"DEBUG: LinkedIn profile: {linkedin_username}, Name: {scraped_full_name}")
             except Exception as e:
                 import traceback
                 print(f"❌ LinkedIn analysis failed: {e}")
