@@ -890,7 +890,16 @@ def result_view(request):
         'linkedin_analysis': linkedin_analysis,
         'facebook_analysis': facebook_analysis,
       }
-    return render(request, 'dashboard/result.html', context) 
+    
+    try:
+        return render(request, 'dashboard/result.html', context)
+    except Exception as e:
+        import traceback
+        print(f"❌ Template rendering error: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        # Return a simple error page instead of 500
+        from django.http import HttpResponse
+        return HttpResponse(f"<html><body><h1>Template Error</h1><pre>{traceback.format_exc()}</pre></body></html>", status=500) 
 
 # PDF export view for dashboard results
 @login_required
