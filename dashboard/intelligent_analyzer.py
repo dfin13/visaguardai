@@ -78,7 +78,7 @@ def generate_profile_assessment(platform, username, full_name):
 def calculate_realistic_risk_score(post_data, ai_score=None):
     """
     Calculate a realistic risk score based on post features.
-    Uses incremental modifiers instead of harsh penalties.
+    Uses incremental modifiers with better variance for realistic grade distribution.
     
     Args:
         post_data: dict - Post metadata
@@ -87,8 +87,9 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
     Returns:
         int - Adjusted risk score (0-100)
     """
-    # Start with base caution score
-    score = 10
+    # Start with lower base score to allow more variance
+    # Professional/clear posts can stay low, ambiguous/risky posts increase more
+    score = 3  # Start at A (safe baseline) instead of 10
     
     # Extract post features
     caption = (post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or '').strip()
@@ -100,13 +101,13 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
     
     # === CAPTION ANALYSIS ===
     if not caption:
-        # Missing caption
-        score += 10
-        print(f"  [MODIFIER] Missing caption: +10 → {score}")
+        # Missing caption - ambiguous, should push to C range
+        score += 20
+        print(f"  [MODIFIER] Missing caption: +20 → {score}")
     elif len(caption.split()) <= 3:
-        # Vague caption (1-3 words)
-        score += 5
-        print(f"  [MODIFIER] Vague caption ({len(caption.split())} words): +5 → {score}")
+        # Vague caption (1-3 words) - slight ambiguity
+        score += 12
+        print(f"  [MODIFIER] Vague caption ({len(caption.split())} words): +12 → {score}")
     
     # === KEYWORD ANALYSIS ===
     caption_lower = caption.lower()
@@ -126,11 +127,12 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
     # === POSITIVE INDICATORS ===
     positive_keywords = [
         'volunteer', 'education', 'university', 'student', 'teamwork',
-        'community', 'professional', 'career', 'work', 'project', 'learning'
+        'community', 'professional', 'career', 'work', 'project', 'learning',
+        'conference', 'achievement', 'graduation', 'certification', 'training'
     ]
     if any(keyword in caption_lower for keyword in positive_keywords):
-        score -= 5  # Reduce to -5 to avoid going too low
-        print(f"  [MODIFIER] Positive professional indicator: -5 → {score}")
+        score -= 8  # Stronger reduction for clear professional content
+        print(f"  [MODIFIER] Positive professional indicator: -8 → {score}")
     
     # === RECENCY ANALYSIS ===
     if created_at:
@@ -139,8 +141,8 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
             post_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
             days_old = (datetime.now(post_date.tzinfo) - post_date).days
             if days_old > 730:  # >2 years
-                score += 5
-                print(f"  [MODIFIER] Old post ({days_old} days): +5 → {score}")
+                score += 8
+                print(f"  [MODIFIER] Old post ({days_old} days): +8 → {score}")
         except:
             pass
     
@@ -148,26 +150,26 @@ def calculate_realistic_risk_score(post_data, ai_score=None):
     total_engagement = likes + comments
     
     if total_engagement == 0:
-        # No engagement data
-        score += 5
-        print(f"  [MODIFIER] No engagement data: +5 → {score}")
+        # No engagement data - slight concern
+        score += 7
+        print(f"  [MODIFIER] No engagement data: +7 → {score}")
     elif total_engagement < 30:
         # Low engagement
-        score += 3
-        print(f"  [MODIFIER] Low engagement ({total_engagement}): +3 → {score}")
+        score += 5
+        print(f"  [MODIFIER] Low engagement ({total_engagement}): +5 → {score}")
     elif total_engagement > 500:
-        # High engagement (credibility boost)
-        score -= 5
-        print(f"  [MODIFIER] High engagement ({total_engagement}): -5 → {score}")
+        # High engagement (credibility boost) - stronger reduction
+        score -= 8
+        print(f"  [MODIFIER] High engagement ({total_engagement}): -8 → {score}")
     
     # === CONTENT FLAGS (SEVERE) ===
     severe_keywords = [
         'violence', 'illegal', 'weapon', 'drug', 'hate', 'threat',
-        'extremist', 'radical', 'terrorist'
+        'extremist', 'radical', 'terrorist', 'arrest', 'fight'
     ]
     if any(keyword in caption_lower for keyword in severe_keywords):
-        score += 30
-        print(f"  [MODIFIER] Explicit severe content: +30 → {score}")
+        score += 40  # Push clearly into F range
+        print(f"  [MODIFIER] Explicit severe content: +40 → {score}")
     
     # === LOCATION SENSITIVITY ===
     sensitive_locations = [
