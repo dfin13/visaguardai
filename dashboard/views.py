@@ -9,7 +9,7 @@ from django.template.loader import render_to_string
 from xhtml2pdf import pisa
 def clear_analysis_session(request):
     keys_to_clear = [
-        'tiktok_analysis',
+        'twitter_analysis',
         'instagram_analysis',
         'linkedin_analysis',
         'facebook_analysis',
@@ -40,7 +40,7 @@ from django.contrib.auth.password_validation import validate_password, Validatio
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
-from .scraper.tiktok import analyze_tiktok_profile
+from .scraper.t import analyze_twitter_profile
 from .scraper.facebook import analyze_facebook_posts
 facebook_analysis= [ {
     "post": "Several of Fox Newsâ€™s most prominent on-air news personalities made clear their desire to help President Trump shortly before and after the 2020 presidential election, according to a tranche of court documents released in a $2.7 billion defamation lawsuit against Fox Corporation filed by Smartmatic, a voting technology company.", 
@@ -173,12 +173,12 @@ def check_analysis_progress(request):
         user_profile = request.user.userprofile
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        tiktok_username = user_profile.tiktok
+        twitter_username = user_profile.twitter
         facebook_username = user_profile.facebook
 
         instagram_result = cache.get(f'instagram_analysis_{request.user.id}')
         linkedin_result = cache.get(f'linkedin_analysis_{request.user.id}')
-        tiktok_result = cache.get(f'tiktok_analysis_{request.user.id}')
+        twitter_result = cache.get(f'twitter_analysis_{request.user.id}')
         facebook_result = cache.get(f'facebook_analysis_{request.user.id}')
 
         # Check for detailed progress stages
@@ -187,19 +187,19 @@ def check_analysis_progress(request):
 
         instagram_done = (not instagram_username) or (instagram_result is not None)
         linkedin_done = (not linkedin_username) or (linkedin_result is not None)
-        tiktok_done = (not tiktok_username) or (tiktok_result is not None)
+        twitter_done = (not twitter_username) or (twitter_result is not None)
         facebook_done = (not facebook_username) or (facebook_result is not None)
 
         # Determine overall progress and message based on detailed stages
-        if instagram_done and linkedin_done and tiktok_done and facebook_done:
+        if instagram_done and linkedin_done and twitter_done and facebook_done:
             request.session['instagram_analysis'] = instagram_result
             request.session['linkedin_analysis'] = linkedin_result
-            request.session['tiktok_analysis'] = tiktok_result
+            request.session['twitter_analysis'] = twitter_result
             request.session['facebook_analysis'] = facebook_result
             # Clear cache
             cache.delete(f'instagram_analysis_{request.user.id}')
             cache.delete(f'linkedin_analysis_{request.user.id}')
-            cache.delete(f'tiktok_analysis_{request.user.id}')
+            cache.delete(f'twitter_analysis_{request.user.id}')
             cache.delete(f'facebook_analysis_{request.user.id}')
             cache.delete(f'analysis_stage_{request.user.id}')
             cache.delete(f'stage_progress_{request.user.id}')
@@ -236,13 +236,13 @@ def check_analysis_progress(request):
                 status = 'comment_scanning'
                 message = 'Comment scanning...'
                 progress = 85 + stage_progress
-            elif instagram_done and linkedin_done and tiktok_done and not facebook_done:
+            elif instagram_done and linkedin_done and twitter_done and not facebook_done:
                 status = 'facebook_processing'
                 message = 'Analyzing Facebook posts...'
                 progress = 90
-            elif instagram_done and linkedin_done and not tiktok_done:
-                status = 'tiktok_processing'
-                message = 'Analyzing TikTok videos...'
+            elif instagram_done and linkedin_done and not twitter_done:
+                status = 'twitter_processing'
+                message = 'Analyzing Twitter posts...'
                 progress = 75
             elif instagram_done and not linkedin_done:
                 status = 'linkedin_processing'
@@ -260,7 +260,7 @@ def check_analysis_progress(request):
             'current_stage': current_stage,
             'instagram_done': instagram_done,
             'linkedin_done': linkedin_done,
-            'tiktok_done': tiktok_done,
+            'twitter_done': twitter_done,
             'facebook_done': facebook_done
         })
     except Exception as e:
@@ -268,20 +268,20 @@ def check_analysis_progress(request):
 
 import threading
 
-def process_analysis_async(user_id, instagram_username, linkedin_username, tiktok_username, facebook_username=None):
+def process_analysis_async(user_id, instagram_username, linkedin_username, twitter_username, facebook_username=None):
     """Process analysis in background thread, always returns results (real or dummy) for each platform."""
     print(f"\n{'='*80}")
     print(f"🔍 BACKGROUND ANALYSIS STARTED")
     print(f"   User ID: {user_id}")
     print(f"   Instagram: {instagram_username or 'None'}")
     print(f"   LinkedIn: {linkedin_username or 'None'}")
-    print(f"   TikTok: {tiktok_username or 'None'}")
+    print(f"   Twitter: {twitter_username or 'None'}")
     print(f"   Facebook: {facebook_username or 'None'}")
     print(f"{'='*80}\n")
     
     from .utils import analyze_all_platforms
     try:
-        analyze_all_platforms(user_id, instagram_username, linkedin_username, tiktok_username, facebook_username)
+        analyze_all_platforms(user_id, instagram_username, linkedin_username, twitter_username, facebook_username)
         print(f"\n✅ Background analysis completed for user {user_id}\n")
     except Exception as e:
         import traceback
@@ -307,11 +307,11 @@ def start_analysis(request):
         user_profile = UserProfile.objects.get(user=request.user)
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        tiktok_username = user_profile.tiktok
+        twitter_username = user_profile.twitter
         facebook_username = user_profile.facebook
         
         # Only start analysis if at least one username is present
-        if not instagram_username and not linkedin_username and not tiktok_username and not facebook_username:
+        if not instagram_username and not linkedin_username and not twitter_username and not facebook_username:
             return JsonResponse({'success': False, 'error': 'Please connect at least one social account before starting analysis.'})
 
         # Reset payment status for new analysis (pay-per-analysis model)
@@ -327,7 +327,7 @@ def start_analysis(request):
         # Clear any existing analysis data from session
         request.session.pop('instagram_analysis', None)
         request.session.pop('linkedin_analysis', None)
-        request.session.pop('tiktok_analysis', None)
+        request.session.pop('twitter_analysis', None)
         request.session.pop('facebook_analysis', None)
         
         # Set analysis state flags
@@ -338,7 +338,7 @@ def start_analysis(request):
         from django.core.cache import cache
         cache.delete(f'instagram_analysis_{request.user.id}')
         cache.delete(f'linkedin_analysis_{request.user.id}')
-        cache.delete(f'tiktok_analysis_{request.user.id}')
+        cache.delete(f'twitter_analysis_{request.user.id}')
         cache.delete(f'facebook_analysis_{request.user.id}')
         print(f"🗑️ Cleared all cached analysis data for user {request.user.id}")
         
@@ -397,7 +397,7 @@ def start_analysis(request):
         # Start background processing for other platforms
         thread = threading.Thread(
             target=process_analysis_async, 
-            args=(request.user.id, instagram_username, linkedin_username, tiktok_username, facebook_username)
+            args=(request.user.id, instagram_username, linkedin_username, twitter_username, facebook_username)
         )
         thread.daemon = False  # Changed from True - allow thread to complete even after response
         thread.start()
@@ -410,7 +410,7 @@ def start_analysis(request):
         return JsonResponse({'success': False, 'error': str(e)})
 @login_required
 def dashboard(request):
-    # Legacy variable removed - using tiktok_analysis instead    
+    tweet_analysis = request.session.get('tweet_analysis')    
     if request.session.get('instagram_analysis') is not None:
         analysis_timestamp = request.session.get('analysis_timestamp', 0)
         current_time = time.time()
@@ -437,14 +437,14 @@ def dashboard(request):
     else:
         linkedin_analysis = None
     
-    tiktok_analysis = request.session.get('tiktok_analysis')
-    tiktok_loading = False
-    tiktok_username = None
+    twitter_analysis = request.session.get('twitter_analysis')
+    twitter_loading = False
+    twitter_username = None
     try:
         user_profile = UserProfile.objects.get(user=request.user)
-        tiktok_username = user_profile.tiktok
+        twitter_username = user_profile.twitter
     except Exception as e:
-        tiktok_username = None
+        twitter_username = None
 
     if request.method == 'POST':
         try:
@@ -518,7 +518,7 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'tiktok': user_profile.tiktok,
+            'twitter': user_profile.twitter,
             'linkedin': user_profile.linkedin
         }
         # Use per-analysis payment status (pay-per-analysis model)
@@ -550,7 +550,7 @@ def dashboard(request):
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'tiktok': None,
+            'twitter': None,
             'linkedin': None
         }
         current_analysis_paid = False
@@ -572,14 +572,14 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'tiktok': user_profile.tiktok,
+            'twitter': user_profile.twitter,
             'linkedin': user_profile.linkedin
         }
     else:
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'tiktok': None,
+            'twitter': None,
             'linkedin': None
         }
 
@@ -600,7 +600,7 @@ def dashboard(request):
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'tiktok': None,
+            'twitter': None,
             'linkedin': None
         }
 
@@ -636,7 +636,7 @@ def dashboard(request):
     analysis_complete = (
         (request.session.get('instagram_analysis') is not None and len(request.session.get('instagram_analysis')) > 0)
         or (request.session.get('linkedin_analysis') is not None and len(request.session.get('linkedin_analysis')) > 0)
-        or (tiktok_analysis is not None and tiktok_analysis != [] and not tiktok_loading)
+        or (twitter_analysis is not None and twitter_analysis != [] and not twitter_loading)
         or (request.session.get('facebook_analysis') is not None and len(request.session.get('facebook_analysis')) > 0)
     )
     
@@ -663,8 +663,8 @@ def dashboard(request):
         'analysis_complete': analysis_complete,
         'instagram_analysis': request.session.get('instagram_analysis'),
         'linkedin_analysis': request.session.get('linkedin_analysis'),
-        'tiktok_analysis': request.session.get("tiktok_analysis"),
-        'tiktok_loading': tiktok_loading,
+        'twitter_analysis': request.session.get("twitter_analysis"),
+        'twitter_loading': twitter_loading,
         'instagram_loading': instagram_loading,
         'price': config.price_dollars if config else 0,
         'price_cents': config.Price if config else 0,
@@ -712,7 +712,7 @@ def debug_endpoints(request):
         debug_info['social_accounts'] = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook, 
-            'tiktok': user_profile.tiktok,
+            'twitter': user_profile.twitter,
             'linkedin': user_profile.linkedin
         }
     except:
@@ -733,7 +733,7 @@ def disconnect_social_account(request):
     try:
         data = json.loads(request.body)
         platform = data.get('platform')
-        if platform not in ['instagram', 'facebook', 'tiktok', 'linkedin']:
+        if platform not in ['instagram', 'facebook', 'twitter', 'linkedin']:
             return JsonResponse({'success': False, 'error': 'Invalid platform'})
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, None)
@@ -752,7 +752,7 @@ def get_social_accounts(request):
         accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'tiktok': user_profile.tiktok,
+            'twitter': user_profile.twitter,
             'linkedin': user_profile.linkedin
         }
         return JsonResponse({
@@ -765,7 +765,7 @@ def get_social_accounts(request):
             'accounts': {
                 'instagram': None,
                 'facebook': None,
-                'tiktok': None,
+                'twitter': None,
                 'linkedin': None
             }
         })
@@ -784,7 +784,7 @@ def connect_social_account(request):
         data = json.loads(request.body)
         platform = data.get('platform')
         username = data.get('username')
-        if platform not in ['instagram', 'facebook', 'tiktok', 'linkedin']:
+        if platform not in ['instagram', 'facebook', 'twitter', 'linkedin']:
             return JsonResponse({'success': False, 'message': 'Invalid platform'})
         if not username:
             return JsonResponse({'success': False, 'message': 'Username is required'})
@@ -821,8 +821,8 @@ def result_view(request):
         cache_key = f'{platform}_profile_{user_id}'
         return cache.get(cache_key)
 
-    tiktok_analysis = get_or_set_analysis('tiktok')
-    print(tiktok_analysis)
+    twitter_analysis = get_or_set_analysis('twitter')
+    print(twitter_analysis)
 
     instagram_analysis = get_or_set_analysis('instagram')
     print('DEBUG: instagram_analysis from session:', request.session.get('instagram_analysis'))
@@ -869,32 +869,12 @@ def result_view(request):
     if facebook_analysis is None:
         facebook_analysis = []
 
-    clean_data = None
-    if tiktok_analysis:
-        if tiktok_analysis.startswith("```json") or tiktok_analysis.startswith("``` json"):
-            clean_data = tiktok_analysis.strip("`")  # remove leading/trailing backticks
-            clean_data = clean_data.replace("json", "", 1).strip()  # remove 'json' right after ```
-        else:
-            clean_data = tiktok_analysis.strip()
-
-    if clean_data is None:
-        tiktok_analysis = []
-    else:
-        tiktok_analysis = clean_data
-    
-
-    # If data is coming as a string (JSON), parse it
-    if isinstance(tiktok_analysis, str):
-        try:
-            tiktok_analysis = json.loads(tiktok_analysis)
-            # If it's a dict with a 'TikTok' key, extract the list
-            if isinstance(tiktok_analysis, dict) and 'TikTok' in tiktok_analysis:
-                tiktok_analysis = tiktok_analysis['TikTok']
-        except json.JSONDecodeError:
-            tiktok_analysis = []
-    
-    if not isinstance(tiktok_analysis, list):
-        tiktok_analysis = [tiktok_analysis]
+    # Twitter analysis - now returns list directly (like other platforms)
+    if twitter_analysis is None:
+        twitter_analysis = []
+    elif not isinstance(twitter_analysis, list):
+        # Safety fallback: if somehow it's not a list, make it one
+        twitter_analysis = [twitter_analysis] if twitter_analysis else []
     
     # Sort all platforms chronologically (most recent → oldest)
     def sort_posts_chronologically(posts):
@@ -932,7 +912,7 @@ def result_view(request):
     # Apply chronological sorting to all platforms
     instagram_analysis = sort_posts_chronologically(instagram_analysis)
     facebook_analysis = sort_posts_chronologically(facebook_analysis)
-    tiktok_analysis = sort_posts_chronologically(tiktok_analysis)
+    twitter_analysis = sort_posts_chronologically(twitter_analysis)
     
     # LinkedIn has nested structure: {'linkedin': [posts]}
     if isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
@@ -942,10 +922,10 @@ def result_view(request):
     safe_count = 0
     caution_count = 0
     warning_count = 0
-    for item in tiktok_analysis:
+    for item in twitter_analysis:
         try:
-            if isinstance(item, dict) and 'TikTok' in item:
-                risk_score = item['TikTok'].get('risk_score', 0)
+            if isinstance(item, dict) and 'Twitter' in item:
+                risk_score = item['Twitter'].get('risk_score', 0)
                 if risk_score == 0:
                     safe_count += 1
                 elif 1 <= risk_score <= 2:
@@ -958,11 +938,11 @@ def result_view(request):
     # Fetch profile summaries
     instagram_profile = get_profile_summary('instagram')
     linkedin_profile = get_profile_summary('linkedin')
-    tiktok_profile = get_profile_summary('tiktok')
+    twitter_profile = get_profile_summary('twitter')
     facebook_profile = get_profile_summary('facebook')
     
     context = {
-        'tiktok_analyses': tiktok_analysis,
+        'twitter_analyses': twitter_analysis,
         'safe_count': safe_count,
         'caution_count': caution_count,
         'warning_count': warning_count,
@@ -972,7 +952,7 @@ def result_view(request):
         'linkedin_profile': linkedin_profile,
         'facebook_analysis': facebook_analysis,
         'facebook_profile': facebook_profile,
-        'tiktok_profile': tiktok_profile,
+        'twitter_profile': twitter_profile,
       }
     return render(request, 'dashboard/result.html', context) 
 
@@ -995,7 +975,7 @@ def export_pdf_view(request):
                 request.session[session_key] = analysis
         return analysis
     
-    tiktok_analysis = get_or_set_analysis('tiktok')
+    twitter_analysis = get_or_set_analysis('twitter')
     instagram_analysis = get_or_set_analysis('instagram')
     linkedin_analysis = get_or_set_analysis('linkedin')
     facebook_analysis = get_or_set_analysis('facebook')
@@ -1008,7 +988,7 @@ def export_pdf_view(request):
         platform_count += 1
     if linkedin_analysis:
         platform_count += 1
-    if tiktok_analysis:
+    if twitter_analysis:
         platform_count += 1
     if facebook_analysis:
         platform_count += 1
@@ -1018,9 +998,9 @@ def export_pdf_view(request):
         'report_date': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
         'instagram_username': user_profile.instagram or 'Not connected',
         'linkedin_username': user_profile.linkedin or 'Not connected',
-        'tiktok_username': user_profile.tiktok or 'Not connected',
+        'twitter_username': user_profile.twitter or 'Not connected',
         'facebook_username': user_profile.facebook or 'Not connected',
-        'tiktok_analyses': tiktok_analysis,
+        'twitter_analyses': twitter_analysis,
         'instagram_analysis': instagram_analysis,
         'linkedin_analysis': linkedin_analysis,
         'facebook_analysis': facebook_analysis,
@@ -1076,13 +1056,13 @@ def change_password(request):
             social_accounts = {
                 'instagram': user_profile.instagram,
                 'facebook': user_profile.facebook,
-                'tiktok': user_profile.tiktok,
+                'twitter': user_profile.twitter,
                 'linkedin': user_profile.linkedin,
             }
             full_name = f"{user.first_name} {user.last_name}".strip()
         except UserProfile.DoesNotExist:
             profile_data = {'username': '', 'country': '', 'university': '', 'profile_picture': None}
-            social_accounts = {'instagram': None, 'facebook': None, 'tiktok': None, 'linkedin': None}
+            social_accounts = {'instagram': None, 'facebook': None, 'twitter': None, 'linkedin': None}
             full_name = ''
         context.update({
             'user': user,
@@ -1104,7 +1084,7 @@ def setting_view(request):
             
             instagram_username = request.POST.get('instagramUsername', '').strip()
             facebook_username = request.POST.get('facebookUsername', '').strip()
-            tiktok_username = request.POST.get('tiktokUsername', '').strip()
+            twitter_username = request.POST.get('twitterUsername', '').strip()
             linkedin_username = request.POST.get('linkedinUsername', '').strip()
             
             # Profile image
@@ -1135,7 +1115,7 @@ def setting_view(request):
                 # Update social media accounts
                 user_profile.instagram = instagram_username if instagram_username else None
                 user_profile.facebook = facebook_username if facebook_username else None
-                user_profile.tiktok = tiktok_username if tiktok_username else None
+                user_profile.twitter = twitter_username if twitter_username else None
                 user_profile.linkedin = linkedin_username if linkedin_username else None
                 
                 # Update profile image if provided
@@ -1154,7 +1134,7 @@ def setting_view(request):
                     university=university,
                     instagram=instagram_username if instagram_username else None,
                     facebook=facebook_username if facebook_username else None,
-                    tiktok=tiktok_username if tiktok_username else None,
+                    twitter=twitter_username if twitter_username else None,
                     linkedin=linkedin_username if linkedin_username else None,
                     profile_picture=profile_image if profile_image else None,
                 )
@@ -1185,7 +1165,7 @@ def setting_view(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'tiktok': user_profile.tiktok,
+            'twitter': user_profile.twitter,
             'linkedin': user_profile.linkedin,
         }
     except UserProfile.DoesNotExist:
@@ -1198,7 +1178,7 @@ def setting_view(request):
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'tiktok': None,
+            'twitter': None,
             'linkedin': None,
         }
     

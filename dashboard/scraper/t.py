@@ -226,7 +226,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     try:
         results = analyze_posts_batch("Twitter", tweets_data)
         print(f"✅ Twitter intelligent analysis complete: {len(results)} tweets")
-        return json.dumps(results, ensure_ascii=False)
+        return results  # Return Python list, not JSON string (consistent with other platforms)
     except Exception as e:
         import traceback
         print(f"❌ Twitter intelligent analysis failed: {e}")
@@ -244,7 +244,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         fallback_analysis = []
         for tweet in tweets:
             fallback_analysis.append({
-                "tweet": tweet["tweet"],
+                "post": tweet["tweet"],  # Changed from "tweet" to "post" for consistency
                 "post_data": {
                     'caption': tweet["tweet"],
                     'post_url': tweet.get("post_url", ""),
@@ -254,7 +254,8 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                     'shares_count': tweet.get("retweets", 0),
                     'data_unavailable': True,
                 },
-                "Twitter": {
+                "analysis": {  # Changed to wrap in "analysis" for consistency
+                    "Twitter": {
                     "content_reinforcement": {
                         "status": "Needs Improvement",
                         "reason": f"Analysis error: {str(e)[:80]}",
@@ -271,10 +272,11 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                         "recommendation": "Review manually"
                     },
                     "risk_score": -1
+                    }
                 }
             })
         
-        return json.dumps(fallback_analysis, ensure_ascii=False)
+        return fallback_analysis  # Return Python list, not JSON string
 
 
 def analyze_with_sample_tweets():
