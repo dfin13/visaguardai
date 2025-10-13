@@ -7,7 +7,6 @@ class UserProfile(models.Model):
     tiktok = models.CharField(blank=True, null=True, max_length=150)
     instagram = models.CharField(blank=True, null=True, max_length=150)
     linkedin = models.CharField(blank=True, null=True, max_length=150)
-    twitter = models.CharField(blank=True, null=True, max_length=150)
     instagram_connected = models.BooleanField(default=False)
     tiktok_connected = models.BooleanField(default=False)
     linkedin_connected = models.BooleanField(default=False)
