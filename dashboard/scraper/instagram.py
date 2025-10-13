@@ -10,6 +10,12 @@ from dashboard.models import Config
 APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
 
+# Log which Apify key source is being used
+if os.getenv('APIFY_API_KEY'):
+    print("🔑 [Instagram] Using Apify key from .env")
+else:
+    print("🔑 [Instagram] Using Apify key from Config table")
+
 # Fallback to database config if environment variables not set
 if not APIFY_API_TOKEN or not OPENROUTER_API_KEY:
     config = Config.objects.first()
@@ -94,7 +100,6 @@ def analyze_instagram_posts(username, limit=5):
                 # Additional metadata
                 "owner_username": item.get("ownerUsername"),
                 "owner_full_name": item.get("ownerFullName"),
-                "followers_count": item.get("ownerFollowersCount") or item.get("followersCount"),
                 "is_sponsored": item.get("isSponsored", False),
                 "comments_disabled": item.get("isCommentsDisabled", False),
                 
@@ -146,22 +151,6 @@ def analyze_instagram_posts(username, limit=5):
             }
         }]
 
-    # ==== PROFILE ASSESSMENT ====
-    # Generate AI assessment of username/full name (once per account)
-    profile_assessment = None
-    if posts_data:
-        try:
-            from dashboard.intelligent_analyzer import analyze_profile_identity
-            owner_username = posts_data[0].get('owner_username', username)
-            owner_full_name = posts_data[0].get('owner_full_name', 'Not available')
-            
-            if owner_username and owner_full_name:
-                print(f"👤 Generating profile assessment for @{owner_username}...")
-                profile_assessment = analyze_profile_identity("Instagram", owner_username, owner_full_name)
-        except Exception as e:
-            print(f"⚠️ Profile assessment failed: {e}")
-            profile_assessment = None
-    
     # ==== INTELLIGENT AI ANALYSIS ====
     print(f"🤖 Starting intelligent analysis for {len(posts_data)} Instagram posts...")
     
@@ -169,15 +158,6 @@ def analyze_instagram_posts(username, limit=5):
     
     try:
         results = analyze_posts_batch("Instagram", posts_data)
-        
-        # Add profile assessment to results (attach to first post)
-        if profile_assessment and results:
-            results[0]['profile_assessment'] = {
-                'username': posts_data[0].get('owner_username', username),
-                'full_name': posts_data[0].get('owner_full_name', 'Not available'),
-                'assessment': profile_assessment
-            }
-        
         print(f"✅ Instagram intelligent analysis complete: {len(results)} posts analyzed")
         return results
     except Exception as e:

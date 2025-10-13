@@ -10,6 +10,12 @@ from dashboard.utils_email import send_api_expiry_alert
 APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
 
+# Log which Apify key source is being used
+if os.getenv('APIFY_API_KEY'):
+    print("🔑 [Facebook] Using Apify key from .env")
+else:
+    print("🔑 [Facebook] Using Apify key from Config table")
+
 # Fallback to database config if environment variables not set
 if not APIFY_API_TOKEN or not OPENROUTER_API_KEY:
     config = Config.objects.first()
