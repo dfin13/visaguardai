@@ -9,7 +9,7 @@ class UserProfile(models.Model):
     linkedin = models.CharField(blank=True, null=True, max_length=150)
     twitter = models.CharField(blank=True, null=True, max_length=150)
     instagram_connected = models.BooleanField(default=False)
-    twitter_connected = models.BooleanField(default=False)
+    tiktok_connected = models.BooleanField(default=False)
     linkedin_connected = models.BooleanField(default=False)
     facebook_connected = models.BooleanField(default=False)
     first_login = models.BooleanField(default=True)
