@@ -73,14 +73,17 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     try:
         # === RUN ACTOR ===
         print("Starting Apify actor...")
+        print(f"⚠️  WARNING: maxTweets set to {tweets_desired}, but actor may ignore this!")
         run = apify_client.actor(actor_id).call(run_input=run_input, wait_secs=15)
         
         # Wait for dataset to populate
         time.sleep(5)
         
-        # === GET DATASET ITEMS ===
-        dataset_items = apify_client.dataset(run["defaultDatasetId"]).list_items().items
-        print(f"Retrieved {len(dataset_items)} items from dataset")
+        # === GET DATASET ITEMS WITH HARD LIMIT ===
+        # CRITICAL: Use limit parameter to prevent pulling all tweets
+        # This prevents billing for hundreds of tweets when we only need 10
+        dataset_items = apify_client.dataset(run["defaultDatasetId"]).list_items(limit=tweets_desired).items
+        print(f"Retrieved {len(dataset_items)} items from dataset (HARD LIMIT: {tweets_desired})")
         
         # Debug: show raw dataset items
         print("Raw dataset items:", json.dumps(dataset_items[:2], indent=2))
