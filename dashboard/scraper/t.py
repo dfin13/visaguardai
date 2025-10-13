@@ -226,7 +226,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     try:
         results = analyze_posts_batch("Twitter", tweets_data)
         print(f"✅ Twitter intelligent analysis complete: {len(results)} tweets")
-        return results  # Return Python list, not JSON string (consistent with other platforms)
+        return json.dumps(results, ensure_ascii=False)
     except Exception as e:
         import traceback
         print(f"❌ Twitter intelligent analysis failed: {e}")
@@ -244,7 +244,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         fallback_analysis = []
         for tweet in tweets:
             fallback_analysis.append({
-                "post": tweet["tweet"],  # Changed from "tweet" to "post" for consistency
+                "tweet": tweet["tweet"],
                 "post_data": {
                     'caption': tweet["tweet"],
                     'post_url': tweet.get("post_url", ""),
@@ -254,8 +254,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                     'shares_count': tweet.get("retweets", 0),
                     'data_unavailable': True,
                 },
-                "analysis": {  # Changed to wrap in "analysis" for consistency
-                    "Twitter": {
+                "Twitter": {
                     "content_reinforcement": {
                         "status": "Needs Improvement",
                         "reason": f"Analysis error: {str(e)[:80]}",
@@ -272,11 +271,10 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                         "recommendation": "Review manually"
                     },
                     "risk_score": -1
-                    }
                 }
             })
         
-        return fallback_analysis  # Return Python list, not JSON string
+        return json.dumps(fallback_analysis, ensure_ascii=False)
 
 
 def analyze_with_sample_tweets():
@@ -308,15 +306,21 @@ def analyze_with_sample_tweets():
 def test_user_existence(username: str):
     """Test if a Twitter user exists using a different approach"""
     try:
-        actor_id = "apidojo/tweet-scraper"
+        actor_id = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
         run_input = {
             "searchTerms": [f"from:{username}"],
             "maxTweets": 1,
-            "addUserInfo": True
+            "addUserInfo": True,
+            "includeSearchTerms": False,
+            "onlyImage": False,
+            "onlyQuote": False,
+            "onlyTwitterBlue": False,
+            "onlyVerifiedUsers": False,
+            "onlyVideo": False,
         }
         
         run = apify_client.actor(actor_id).call(run_input=run_input)
-        dataset_items = apify_client.dataset(run["defaultDatasetId"]).list_items().items
+        dataset_items = apify_client.dataset(run["defaultDatasetId"]).list_items(limit=1).items
         
         return len(dataset_items) > 0
     except:
