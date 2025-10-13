@@ -59,9 +59,9 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         "startUrls": [{"url": fb_url}],
         "resultsLimit": limit,
         "scrapePostsUntilDate": None,
-        "includeReactions": False,
-        "includeComments": False,
-        "includePostUrls": False
+        "includeReactions": True,   # Enable to get engagement data
+        "includeComments": True,    # Enable to get comment counts
+        "includePostUrls": True     # Enable to get post URLs
     }
 
     print(f"Scraping up to {limit} Facebook posts for {fb_url}...")
@@ -71,23 +71,79 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         cache.set(f'stage_progress_{user_id}', 10, timeout=60*60)
     
     try:
+        from .account_checker import create_inaccessible_account_response
+        
         run = apify_client.actor("apify/facebook-posts-scraper").call(run_input=run_input)
 
-        # Collect all post texts
+        # Collect all posts with full metadata
         posts = []
         for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
             post_text = item.get("text", "").strip()
             if post_text:
-                posts.append(post_text)
+                # Extract all available fields for analysis
+                post_url = (
+                    item.get("url") or 
+                    item.get("post_url") or 
+                    item.get("postUrl") or 
+                    item.get("link") or 
+                    item.get("permalink") or 
+                    None
+                )
+                timestamp = (
+                    item.get("timestamp") or 
+                    item.get("created_at") or 
+                    item.get("date") or 
+                    item.get("time") or 
+                    None
+                )
+                likes_count = (
+                    item.get("likes") or 
+                    item.get("likesCount") or 
+                    item.get("reactions") or 
+                    item.get("reactionsCount") or 
+                    0
+                )
+                comments_count = (
+                    item.get("comments") or 
+                    item.get("commentsCount") or 
+                    item.get("comment_count") or 
+                    0
+                )
+                shares_count = (
+                    item.get("shares") or 
+                    item.get("sharesCount") or 
+                    item.get("share_count") or 
+                    0
+                )
+                
+                posts.append({
+                    'text': post_text,
+                    'post_url': post_url,
+                    'timestamp': timestamp,
+                    'likes_count': likes_count,
+                    'comments_count': comments_count,
+                    'shares_count': shares_count,
+                })
 
-        # Check if account is accessible
+        # Check if account is accessible (pass text content for check)
         from .account_checker import check_scraping_result
-        is_accessible, result = check_scraping_result(posts, "Facebook", username_or_url)
+        post_texts = [post['text'] for post in posts]
+        is_accessible, result = check_scraping_result(post_texts, "Facebook", username_or_url)
         if not is_accessible:
             return result
     except Exception as e:
         print(f"Scraping failed: {e}")
         error_str = str(e).lower()
+        
+        # Check for Apify plan limitations
+        if "cannot run this public actor" in error_str or "current plan does not support" in error_str:
+            print("❌ Facebook scraper unavailable: Apify plan doesn't support public actors")
+            return create_inaccessible_account_response(
+                "Facebook", 
+                username_or_url, 
+                "scraper is unavailable due to API plan limitations. Please upgrade Apify subscription to enable Facebook analysis."
+            )
+        
         if any(word in error_str for word in ["expired", "invalid", "authentication", "quota", "rate-limit"]):
             send_api_expiry_alert(
                 subject="VisaGuardAI: Apify API Expiry/Failure Alert",
@@ -112,13 +168,19 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
     # === INTELLIGENT AI ANALYSIS ===
     from dashboard.intelligent_analyzer import analyze_posts_batch
     
-    # Convert posts to standard format
+    # Convert posts to standard format with all metadata
     posts_data = []
-    for post_text in posts:
+    for post in posts:
         posts_data.append({
-            'caption': post_text,
-            'text': post_text,
-            'post_text': post_text,
+            'caption': post['text'],
+            'text': post['text'],
+            'post_text': post['text'],
+            'post_url': post.get('post_url'),
+            'created_at': post.get('timestamp'),
+            'timestamp': post.get('timestamp'),
+            'likes_count': post.get('likes_count', 0),
+            'comments_count': post.get('comments_count', 0),
+            'shares_count': post.get('shares_count', 0),
             'type': 'post',
             'hashtags': [],
             'mentions': [],
