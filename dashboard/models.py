@@ -7,8 +7,9 @@ class UserProfile(models.Model):
     tiktok = models.CharField(blank=True, null=True, max_length=150)
     instagram = models.CharField(blank=True, null=True, max_length=150)
     linkedin = models.CharField(blank=True, null=True, max_length=150)
+    # twitter field removed - migrated to support Twitter/X analysis without storing usernames
     instagram_connected = models.BooleanField(default=False)
-    tiktok_connected = models.BooleanField(default=False)
+    tiktok_connected = models.BooleanField(default=False)  # renamed from twitter_connected
     linkedin_connected = models.BooleanField(default=False)
     facebook_connected = models.BooleanField(default=False)
     first_login = models.BooleanField(default=True)

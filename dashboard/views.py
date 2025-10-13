@@ -173,7 +173,7 @@ def check_analysis_progress(request):
         user_profile = request.user.userprofile
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        twitter_username = user_profile.twitter
+        twitter_username = None  # twitter field removed from model
         facebook_username = user_profile.facebook
 
         instagram_result = cache.get(f'instagram_analysis_{request.user.id}')
@@ -307,7 +307,7 @@ def start_analysis(request):
         user_profile = UserProfile.objects.get(user=request.user)
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        twitter_username = user_profile.twitter
+        twitter_username = None  # twitter field removed from model
         facebook_username = user_profile.facebook
         
         # Only start analysis if at least one username is present
@@ -442,7 +442,7 @@ def dashboard(request):
     twitter_username = None
     try:
         user_profile = UserProfile.objects.get(user=request.user)
-        twitter_username = user_profile.twitter
+        twitter_username = None  # twitter field removed from model
     except Exception as e:
         twitter_username = None
 
@@ -518,8 +518,8 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'linkedin': user_profile.linkedin,
-            'tiktok': user_profile.tiktok
+            # 'twitter': None,  # twitter field removed from model
+            'linkedin': user_profile.linkedin
         }
         # Use per-analysis payment status (pay-per-analysis model)
         current_analysis_paid = request.session.get('current_analysis_paid', False)
@@ -572,14 +572,14 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': user_profile.twitter,
+            # twitter field removed - Twitter/X analysis doesn't require storing usernames
             'linkedin': user_profile.linkedin
         }
     else:
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'twitter': None,
+            # twitter field removed - Twitter/X analysis doesn't require storing usernames
             'linkedin': None
         }
 
@@ -712,7 +712,7 @@ def debug_endpoints(request):
         debug_info['social_accounts'] = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook, 
-            'twitter': user_profile.twitter,
+            # 'twitter': None,  # twitter field removed from model
             'linkedin': user_profile.linkedin
         }
     except:
@@ -752,7 +752,7 @@ def get_social_accounts(request):
         accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': user_profile.twitter,
+            # 'twitter': None,  # twitter field removed from model
             'linkedin': user_profile.linkedin
         }
         return JsonResponse({
@@ -869,12 +869,32 @@ def result_view(request):
     if facebook_analysis is None:
         facebook_analysis = []
 
-    # Twitter analysis - now returns list directly (like other platforms)
-    if twitter_analysis is None:
+    clean_data = None
+    if twitter_analysis:
+        if twitter_analysis.startswith("```json") or twitter_analysis.startswith("``` json"):
+            clean_data = twitter_analysis.strip("`")  # remove leading/trailing backticks
+            clean_data = clean_data.replace("json", "", 1).strip()  # remove 'json' right after ```
+        else:
+            clean_data = twitter_analysis.strip()
+
+    if clean_data is None:
         twitter_analysis = []
-    elif not isinstance(twitter_analysis, list):
-        # Safety fallback: if somehow it's not a list, make it one
-        twitter_analysis = [twitter_analysis] if twitter_analysis else []
+    else:
+        twitter_analysis = clean_data
+    
+
+    # If data is coming as a string (JSON), parse it
+    if isinstance(twitter_analysis, str):
+        try:
+            twitter_analysis = json.loads(twitter_analysis)
+            # If it's a dict with a 'Twitter' key, extract the list
+            if isinstance(twitter_analysis, dict) and 'Twitter' in twitter_analysis:
+                twitter_analysis = twitter_analysis['Twitter']
+        except json.JSONDecodeError:
+            twitter_analysis = []
+    
+    if not isinstance(twitter_analysis, list):
+        twitter_analysis = [twitter_analysis]
     
     # Sort all platforms chronologically (most recent → oldest)
     def sort_posts_chronologically(posts):
@@ -998,7 +1018,7 @@ def export_pdf_view(request):
         'report_date': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
         'instagram_username': user_profile.instagram or 'Not connected',
         'linkedin_username': user_profile.linkedin or 'Not connected',
-        'twitter_username': user_profile.twitter or 'Not connected',
+        # 'twitter_username': 'Not connected',  # twitter field removed from model
         'facebook_username': user_profile.facebook or 'Not connected',
         'twitter_analyses': twitter_analysis,
         'instagram_analysis': instagram_analysis,
@@ -1056,13 +1076,13 @@ def change_password(request):
             social_accounts = {
                 'instagram': user_profile.instagram,
                 'facebook': user_profile.facebook,
-                'twitter': user_profile.twitter,
+                # 'twitter': None,  # twitter field removed from model
                 'linkedin': user_profile.linkedin,
             }
             full_name = f"{user.first_name} {user.last_name}".strip()
         except UserProfile.DoesNotExist:
             profile_data = {'username': '', 'country': '', 'university': '', 'profile_picture': None}
-            social_accounts = {'instagram': None, 'facebook': None, 'twitter': None, 'linkedin': None}
+            social_accounts = {'instagram': None, 'facebook': None, 'linkedin': None}  # twitter removed
             full_name = ''
         context.update({
             'user': user,
@@ -1115,7 +1135,7 @@ def setting_view(request):
                 # Update social media accounts
                 user_profile.instagram = instagram_username if instagram_username else None
                 user_profile.facebook = facebook_username if facebook_username else None
-                user_profile.twitter = twitter_username if twitter_username else None
+                # user_profile.twitter removed - field no longer exists in model
                 user_profile.linkedin = linkedin_username if linkedin_username else None
                 
                 # Update profile image if provided
@@ -1165,7 +1185,7 @@ def setting_view(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': user_profile.twitter,
+            # 'twitter': None,  # twitter field removed from model
             'linkedin': user_profile.linkedin,
         }
     except UserProfile.DoesNotExist:
