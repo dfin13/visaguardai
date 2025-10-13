@@ -73,6 +73,8 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
     try:
         from .account_checker import create_inaccessible_account_response
         
+        # Use Facebook Posts Scraper (requires subscription for pay-per-event billing)
+        # Subscribe at: https://apify.com/apify/facebook-posts-scraper
         run = apify_client.actor("apify/facebook-posts-scraper").call(run_input=run_input)
 
         # Collect all posts with full metadata
@@ -135,15 +137,7 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         print(f"Scraping failed: {e}")
         error_str = str(e).lower()
         
-        # Check for Apify plan limitations
-        if "cannot run this public actor" in error_str or "current plan does not support" in error_str:
-            print("❌ Facebook scraper unavailable: Apify plan doesn't support public actors")
-            return create_inaccessible_account_response(
-                "Facebook", 
-                username_or_url, 
-                "scraper is unavailable due to API plan limitations. Please upgrade Apify subscription to enable Facebook analysis."
-            )
-        
+        # Alert on API issues
         if any(word in error_str for word in ["expired", "invalid", "authentication", "quota", "rate-limit"]):
             send_api_expiry_alert(
                 subject="VisaGuardAI: Apify API Expiry/Failure Alert",

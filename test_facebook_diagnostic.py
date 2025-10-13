@@ -68,10 +68,10 @@ print(json.dumps(run_input, indent=2))
 print()
 
 try:
-    print("🚀 Starting Apify actor: apify/facebook-posts-scraper")
+    print("🚀 Starting Apify actor: 4Hv5RhChiaDk6iwad (facebook-pages-scraper)")
     print("⏳ Please wait...")
     
-    run = apify_client.actor("apify/facebook-posts-scraper").call(run_input=run_input)
+    run = apify_client.actor("4Hv5RhChiaDk6iwad").call(run_input=run_input)
     
     print(f"✅ Scraper completed!")
     print(f"📦 Dataset ID: {run['defaultDatasetId']}")
