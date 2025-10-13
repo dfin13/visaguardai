@@ -518,8 +518,8 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': user_profile.twitter,
-            'linkedin': user_profile.linkedin
+            'linkedin': user_profile.linkedin,
+            'tiktok': user_profile.tiktok
         }
         # Use per-analysis payment status (pay-per-analysis model)
         current_analysis_paid = request.session.get('current_analysis_paid', False)
