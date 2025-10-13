@@ -338,7 +338,7 @@ def start_analysis(request):
         from django.core.cache import cache
         cache.delete(f'instagram_analysis_{request.user.id}')
         cache.delete(f'linkedin_analysis_{request.user.id}')
-        cache.delete(f'twitter_analysis_{request.user.id}')
+        cache.delete(f'tiktok_analysis_{request.user.id}')
         cache.delete(f'facebook_analysis_{request.user.id}')
         print(f"🗑️ Cleared all cached analysis data for user {request.user.id}")
         
@@ -733,7 +733,7 @@ def disconnect_social_account(request):
     try:
         data = json.loads(request.body)
         platform = data.get('platform')
-        if platform not in ['instagram', 'facebook', 'twitter', 'linkedin']:
+        if platform not in ['instagram', 'facebook', 'tiktok', 'linkedin']:
             return JsonResponse({'success': False, 'error': 'Invalid platform'})
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, None)
@@ -821,8 +821,8 @@ def result_view(request):
         cache_key = f'{platform}_profile_{user_id}'
         return cache.get(cache_key)
 
-    tiktok_analysis = get_or_set_analysis('twitter')
-    print(twitter_analysis)
+    tiktok_analysis = get_or_set_analysis('tiktok')
+    print(tiktok_analysis)
 
     instagram_analysis = get_or_set_analysis('instagram')
     print('DEBUG: instagram_analysis from session:', request.session.get('instagram_analysis'))
@@ -870,12 +870,12 @@ def result_view(request):
         facebook_analysis = []
 
     clean_data = None
-    if twitter_analysis:
-        if twitter_analysis.startswith("```json") or twitter_analysis.startswith("``` json"):
-            clean_data = twitter_analysis.strip("`")  # remove leading/trailing backticks
+    if tiktok_analysis:
+        if tiktok_analysis.startswith("```json") or tiktok_analysis.startswith("``` json"):
+            clean_data = tiktok_analysis.strip("`")  # remove leading/trailing backticks
             clean_data = clean_data.replace("json", "", 1).strip()  # remove 'json' right after ```
         else:
-            clean_data = twitter_analysis.strip()
+            clean_data = tiktok_analysis.strip()
 
     if clean_data is None:
         tiktok_analysis = []
@@ -932,7 +932,7 @@ def result_view(request):
     # Apply chronological sorting to all platforms
     instagram_analysis = sort_posts_chronologically(instagram_analysis)
     facebook_analysis = sort_posts_chronologically(facebook_analysis)
-    tiktok_analysis = sort_posts_chronologically(twitter_analysis)
+    tiktok_analysis = sort_posts_chronologically(tiktok_analysis)
     
     # LinkedIn has nested structure: {'linkedin': [posts]}
     if isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
@@ -942,10 +942,10 @@ def result_view(request):
     safe_count = 0
     caution_count = 0
     warning_count = 0
-    for item in twitter_analysis:
+    for item in tiktok_analysis:
         try:
-            if isinstance(item, dict) and 'Twitter' in item:
-                risk_score = item['Twitter'].get('risk_score', 0)
+            if isinstance(item, dict) and 'TikTok' in item:
+                risk_score = item['TikTok'].get('risk_score', 0)
                 if risk_score == 0:
                     safe_count += 1
                 elif 1 <= risk_score <= 2:
@@ -995,7 +995,7 @@ def export_pdf_view(request):
                 request.session[session_key] = analysis
         return analysis
     
-    tiktok_analysis = get_or_set_analysis('twitter')
+    tiktok_analysis = get_or_set_analysis('tiktok')
     instagram_analysis = get_or_set_analysis('instagram')
     linkedin_analysis = get_or_set_analysis('linkedin')
     facebook_analysis = get_or_set_analysis('facebook')
@@ -1008,7 +1008,7 @@ def export_pdf_view(request):
         platform_count += 1
     if linkedin_analysis:
         platform_count += 1
-    if twitter_analysis:
+    if tiktok_analysis:
         platform_count += 1
     if facebook_analysis:
         platform_count += 1
@@ -1082,7 +1082,7 @@ def change_password(request):
             full_name = f"{user.first_name} {user.last_name}".strip()
         except UserProfile.DoesNotExist:
             profile_data = {'username': '', 'country': '', 'university': '', 'profile_picture': None}
-            social_accounts = {'instagram': None, 'facebook': None, 'twitter': None, 'linkedin': None}
+            social_accounts = {'instagram': None, 'facebook': None, 'tiktok': None, 'linkedin': None}
             full_name = ''
         context.update({
             'user': user,
