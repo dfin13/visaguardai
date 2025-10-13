@@ -42,8 +42,12 @@ apify_client = ApifyClient(APIFY_API_TOKEN)
 def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
     """
     Scrapes Facebook posts for a given username/page ID or full URL and analyzes them in ONE AI call.
+    Maximum limit: 10 posts to prevent excessive API usage.
     """
     from django.core.cache import cache
+    
+    # Cap limit at 10 posts maximum
+    limit = min(limit, 10)
     
     # Set progress stages
     if user_id:
@@ -132,6 +136,10 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
                     'comments_count': comments_count,
                     'shares_count': shares_count,
                 })
+
+        # Enforce 10 post limit (safety slice in case actor returns more)
+        posts = posts[:10]
+        print(f"✅ Final count: {len(posts)} Facebook posts (capped at 10)")
 
         # Check if account is accessible (pass text content for check)
         from .account_checker import check_scraping_result

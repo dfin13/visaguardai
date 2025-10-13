@@ -13,6 +13,12 @@ from dashboard.utils_email import send_api_expiry_alert
 APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
 
+# Log which Apify key source is being used
+if os.getenv('APIFY_API_KEY'):
+    print("🔑 [Twitter] Using Apify key from .env")
+else:
+    print("🔑 [Twitter] Using Apify key from Config table")
+
 # Fallback to database config if environment variables not set
 if not APIFY_API_TOKEN or not OPENROUTER_API_KEY:
     config = Config.objects.first()
@@ -37,24 +43,31 @@ client_ai = OpenAI(
 # This function was creating fake tweets when scraping failed.
 # Instead, we now return proper "inaccessible account" responses.
 
-def analyze_twitter_profile(username: str, tweets_desired: int = 5):
+def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     """
     Analyze Twitter profile.
     Returns proper response for inaccessible accounts instead of fabricating content.
+    Maximum limit: 10 tweets to prevent excessive API usage.
     """
     from .account_checker import check_scraping_result, create_inaccessible_account_response, is_account_private_error
     
-    print(f"Starting Twitter analysis for {username}")
+    # Cap limit at 10 tweets maximum
+    tweets_desired = min(tweets_desired, 10)
+    
+    print(f"Starting Twitter analysis for {username} (limit: {tweets_desired} tweets, capped at 10 max)")
     
     # === APIFY ACTOR CONFIG ===
-    actor_id = "danek/twitter-timeline"
+    actor_id = "apidojo/tweet-scraper"
     run_input = {
-        "usernames": [username],     # expects list
-        "max_posts": tweets_desired, # required field
-        "include_replies": False,
-        "include_user_info": True,
-        "max_request_retries": 3,
-        "request_timeout_secs": 30,
+        "searchTerms": [f"from:{username}"],
+        "maxTweets": tweets_desired,
+        "addUserInfo": True,
+        "includeSearchTerms": False,
+        "onlyImage": False,
+        "onlyQuote": False,
+        "onlyTwitterBlue": False,
+        "onlyVerifiedUsers": False,
+        "onlyVideo": False,
     }
 
     try:
@@ -72,15 +85,92 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 5):
         # Debug: show raw dataset items
         print("Raw dataset items:", json.dumps(dataset_items[:2], indent=2))
         
-        # === Extract tweets ===
+        # === Extract tweets with all metadata ===
         tweets = []
         for item in dataset_items:
-            tweet_text = item.get("full_text") or item.get("text") or item.get("content")
-            if tweet_text:
-                tweets.append({"tweet": tweet_text})
+            try:
+                # Extract tweet text
+                tweet_text = (
+                    item.get("full_text") or 
+                    item.get("text") or 
+                    item.get("content") or 
+                    item.get("tweet", {}).get("full_text") or
+                    item.get("tweet", {}).get("text")
+                )
+                
+                if not tweet_text:
+                    continue
+                
+                # Extract URL
+                tweet_url = (
+                    item.get("url") or 
+                    item.get("tweetUrl") or
+                    item.get("tweet", {}).get("url") or
+                    f"https://twitter.com/{username}/status/{item.get('id_str', '')}"
+                )
+                
+                # Extract timestamp
+                timestamp = (
+                    item.get("created_at") or
+                    item.get("createdAt") or
+                    item.get("timestamp") or
+                    item.get("tweet", {}).get("created_at")
+                )
+                
+                # Extract engagement metrics
+                likes_count = (
+                    item.get("favorite_count") or
+                    item.get("likes") or
+                    item.get("likeCount") or
+                    item.get("tweet", {}).get("favorite_count") or
+                    0
+                )
+                
+                replies_count = (
+                    item.get("reply_count") or
+                    item.get("replies") or
+                    item.get("replyCount") or
+                    item.get("tweet", {}).get("reply_count") or
+                    0
+                )
+                
+                retweets_count = (
+                    item.get("retweet_count") or
+                    item.get("retweets") or
+                    item.get("retweetCount") or
+                    item.get("tweet", {}).get("retweet_count") or
+                    0
+                )
+                
+                # Extract hashtags and mentions
+                hashtags = []
+                mentions = []
+                
+                entities = item.get("entities", {})
+                if entities:
+                    hashtags = [tag.get("text", "") for tag in entities.get("hashtags", [])]
+                    mentions = [mention.get("screen_name", "") for mention in entities.get("user_mentions", [])]
+                
+                tweets.append({
+                    "tweet": tweet_text,
+                    "post_url": tweet_url,
+                    "timestamp": timestamp,
+                    "likes": likes_count,
+                    "replies": replies_count,
+                    "retweets": retweets_count,
+                    "hashtags": hashtags,
+                    "mentions": mentions,
+                })
+            except Exception as e:
+                print(f"⚠️  Error extracting tweet data: {e}")
+                continue
+        
+        # Enforce 10 tweet limit (safety slice in case actor returns more)
+        tweets = tweets[:10]
+        print(f"✅ Final count: {len(tweets)} tweets (capped at 10)")
         
         # Check if account is accessible
-        is_accessible, result = check_scraping_result(tweets, "Twitter", username)
+        is_accessible, result = check_scraping_result([{"tweet": t["tweet"]} for t in tweets], "Twitter", username)
         if not is_accessible:
             return result
             
@@ -114,12 +204,15 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 5):
     tweets_data = []
     for tweet in tweets:
         tweets_data.append({
-            'caption': tweet.get('tweet', ''),
             'text': tweet.get('tweet', ''),
+            'caption': tweet.get('tweet', ''),
             'post_text': tweet.get('tweet', ''),
+            'post_url': tweet.get('post_url', ''),
+            'timestamp': tweet.get('timestamp'),
             'created_at': tweet.get('timestamp'),
             'likes_count': tweet.get('likes', 0),
             'comments_count': tweet.get('replies', 0),
+            'shares_count': tweet.get('retweets', 0),
             'type': 'tweet',
             'hashtags': tweet.get('hashtags', []),
             'mentions': tweet.get('mentions', []),
@@ -149,6 +242,11 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 5):
                 "tweet": tweet["tweet"],
                 "post_data": {
                     'caption': tweet["tweet"],
+                    'post_url': tweet.get("post_url", ""),
+                    'timestamp': tweet.get("timestamp"),
+                    'likes_count': tweet.get("likes", 0),
+                    'comments_count': tweet.get("replies", 0),
+                    'shares_count': tweet.get("retweets", 0),
                     'data_unavailable': True,
                 },
                 "Twitter": {

@@ -58,24 +58,28 @@ def extract_json_from_ai_response(text):
 # Instead, we now return proper "inaccessible account" responses.
 
 # --- Scraper ---
-def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
+def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
     """
     Scrape LinkedIn posts with optimized settings.
-    Fetches ONLY the latest 2-3 posts for the specific username.
+    Fetches up to 10 most recent posts for the specific username.
     LinkedIn scraping is inherently slower due to anti-scraping measures.
+    Maximum limit: 10 posts to prevent excessive API usage.
     """
     from .account_checker import create_inaccessible_account_response, is_account_private_error, check_scraping_result
+    
+    # Cap limit at 10 posts maximum
+    limit = min(limit, 10)
     
     # Configure scraper to fetch only latest posts for specific user profile
     run_input = {
         "username": username,
         "page_number": page_number,
-        "limit": limit,  # Hard limit: fetch only 2-3 posts
+        "limit": limit,  # Hard limit: max 10 posts
         "profileUrl": f"https://www.linkedin.com/in/{username}/"  # Target specific profile
     }
     
     try:
-        print(f"⏱️  Starting LinkedIn scraping for: {username} (limit: {limit} posts)")
+        print(f"⏱️  Starting LinkedIn scraping for: {username} (limit: {limit} posts, capped at 10 max)")
         print(f"   Profile URL: https://www.linkedin.com/in/{username}/")
         print(f"   Mode: Latest posts only (no feed scanning)")
         
@@ -130,6 +134,10 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=3):
             break
     
     print(f"   📊 Total posts collected: {len(posts)}")
+    
+    # Enforce 10 post limit (safety slice in case actor returns more)
+    posts = posts[:10]
+    print(f"   ✅ Final count: {len(posts)} posts (capped at 10)")
     
     # Check if account is accessible
     post_texts = [post["post_text"] for post in posts]

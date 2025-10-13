@@ -14,6 +14,12 @@ def get_ai_client():
     """Initialize OpenRouter AI client"""
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or getattr(settings, 'OPENROUTER_API_KEY', None)
     
+    # Log which key source is being used
+    if os.getenv('OPENROUTER_API_KEY'):
+        print("🔑 [AI Analyzer] Using OpenRouter key from .env")
+    else:
+        print("🔑 [AI Analyzer] Attempting to use OpenRouter key from Config table")
+    
     if not OPENROUTER_API_KEY:
         config = Config.objects.first()
         if config:
@@ -22,9 +28,14 @@ def get_ai_client():
     if not OPENROUTER_API_KEY:
         raise ValueError("OPENROUTER_API_KEY not found")
     
+    # OpenRouter requires additional headers for proper authentication
     return OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=OPENROUTER_API_KEY,
+        default_headers={
+            "HTTP-Referer": "https://visaguardai.com",
+            "X-Title": "VisaGuardAI"
+        }
     )
 
 

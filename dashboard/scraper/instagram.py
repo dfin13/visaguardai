@@ -40,16 +40,20 @@ apify_client = ApifyClient(APIFY_API_TOKEN)
 # This function was creating fake Instagram posts when scraping failed.
 # Instead, we now return proper "inaccessible account" responses.
 
-def analyze_instagram_posts(username, limit=5):
+def analyze_instagram_posts(username, limit=10):
     """
     Scrape & analyze Instagram posts.
     Returns proper response for inaccessible accounts instead of fabricating content.
+    Maximum limit: 10 posts to prevent excessive API usage.
     """
     from .account_checker import check_scraping_result, create_inaccessible_account_response, is_account_private_error
 
+    # Cap limit at 10 posts maximum
+    limit = min(limit, 10)
+    
     print(f"\n🔍 INSTAGRAM ANALYSIS STARTING")
     print(f"   Username: {username}")
-    print(f"   Limit: {limit} posts")
+    print(f"   Limit: {limit} posts (capped at 10 max)")
 
     # ==== SCRAPE INSTAGRAM POSTS ====
     run_input = {
@@ -114,7 +118,11 @@ def analyze_instagram_posts(username, limit=5):
             if caption:
                 posts_text_only.append(caption)
         
-        print(f"✅ Scraped {len(posts_data)} Instagram posts")
+        # Enforce 10 post limit (safety slice in case actor returns more)
+        posts_data = posts_data[:10]
+        posts_text_only = posts_text_only[:10]
+        
+        print(f"✅ Scraped {len(posts_data)} Instagram posts (capped at 10)")
         if posts_data:
             print(f"   First post: ID={posts_data[0]['post_id']}, Type={posts_data[0]['type']}, Timestamp={posts_data[0]['created_at']}")
         
