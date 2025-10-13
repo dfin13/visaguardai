@@ -57,7 +57,9 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     print(f"Starting Twitter analysis for {username} (limit: {tweets_desired} tweets, capped at 10 max)")
     
     # === APIFY ACTOR CONFIG ===
-    actor_id = "apidojo/tweet-scraper"
+    # Using kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest
+    # This actor charges per result and respects limits properly
+    actor_id = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
     run_input = {
         "searchTerms": [f"from:{username}"],
         "maxTweets": tweets_desired,
@@ -72,8 +74,8 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
 
     try:
         # === RUN ACTOR ===
-        print("Starting Apify actor...")
-        print(f"⚠️  WARNING: maxTweets set to {tweets_desired}, but actor may ignore this!")
+        print("Starting Apify actor (kaitoeasyapi/twitter-x-data-tweet-scraper)...")
+        print(f"✅ Using pay-per-result actor with limit: {tweets_desired} tweets")
         run = apify_client.actor(actor_id).call(run_input=run_input, wait_secs=15)
         
         # Wait for dataset to populate
