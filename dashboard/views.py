@@ -867,7 +867,7 @@ def result_view(request):
     # Log first result for verification
     if linkedin_analysis and isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
         posts = linkedin_analysis['linkedin']
-        if isinstance(posts, list) and len(posts) > 0:
+        if posts and isinstance(posts, list) and len(posts) > 0:
             first_item = posts[0]
             print(f"\n{'='*80}")
             print(f"📊 LINKEDIN FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
