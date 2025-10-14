@@ -173,7 +173,7 @@ def check_analysis_progress(request):
         user_profile = request.user.userprofile
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        twitter_username = None  # twitter field removed from model
+        twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
         facebook_username = user_profile.facebook
 
         instagram_result = cache.get(f'instagram_analysis_{request.user.id}')
@@ -439,12 +439,11 @@ def dashboard(request):
     
     twitter_analysis = request.session.get('twitter_analysis')
     twitter_loading = False
-    twitter_username = None
+    twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
     try:
         user_profile = UserProfile.objects.get(user=request.user)
-        twitter_username = None  # twitter field removed from model
     except Exception as e:
-        twitter_username = None
+        pass
 
     if request.method == 'POST':
         try:
