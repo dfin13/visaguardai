@@ -835,6 +835,8 @@ def result_view(request):
         return cache.get(cache_key)
 
     twitter_analysis = get_or_set_analysis('twitter')
+    if twitter_analysis is None:
+        twitter_analysis = []
     print(twitter_analysis)
 
     instagram_analysis = get_or_set_analysis('instagram')
@@ -882,22 +884,21 @@ def result_view(request):
     if facebook_analysis is None:
         facebook_analysis = []
 
-    clean_data = None
-    if twitter_analysis:
-        if twitter_analysis.startswith("```json") or twitter_analysis.startswith("``` json"):
-            clean_data = twitter_analysis.strip("`")  # remove leading/trailing backticks
-            clean_data = clean_data.replace("json", "", 1).strip()  # remove 'json' right after ```
-        else:
-            clean_data = twitter_analysis.strip()
-
-    if clean_data is None:
-        twitter_analysis = []
-    else:
-        twitter_analysis = clean_data
-    
-
     # If data is coming as a string (JSON), parse it
     if isinstance(twitter_analysis, str):
+        # Handle markdown-wrapped JSON
+        clean_data = None
+        if twitter_analysis:
+            if twitter_analysis.startswith("```json") or twitter_analysis.startswith("``` json"):
+                clean_data = twitter_analysis.strip("`")  # remove leading/trailing backticks
+                clean_data = clean_data.replace("json", "", 1).strip()  # remove 'json' right after ```
+            else:
+                clean_data = twitter_analysis.strip()
+        
+        if clean_data is None:
+            twitter_analysis = []
+        else:
+            twitter_analysis = clean_data
         try:
             twitter_analysis = json.loads(twitter_analysis)
             # If it's a dict with a 'Twitter' key, extract the list
