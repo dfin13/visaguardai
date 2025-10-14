@@ -94,6 +94,11 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         tweets = []
         for item in dataset_items:
             try:
+                # Filter out mock/demo data from actor
+                if item.get("type") == "mock_tweet" or item.get("id") == -1:
+                    print(f"⚠️  Skipping mock/demo tweet")
+                    continue
+                
                 # Extract tweet text
                 tweet_text = (
                     item.get("full_text") or 
@@ -174,6 +179,11 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         tweets = tweets[:10]
         print(f"✅ Final count: {len(tweets)} tweets (capped at 10)")
         
+        # Check if we got any real tweets (all might have been mock data)
+        if len(tweets) == 0:
+            print(f"❌ No real tweets found for @{username} (only mock/demo data or account doesn't exist)")
+            return f"Twitter account @{username} not found or has no tweets. Please verify the username is correct and the account is public."
+        
         # Check if account is accessible
         is_accessible, result = check_scraping_result([{"tweet": t["tweet"]} for t in tweets], "Twitter", username)
         if not is_accessible:
@@ -226,7 +236,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     try:
         results = analyze_posts_batch("Twitter", tweets_data)
         print(f"✅ Twitter intelligent analysis complete: {len(results)} tweets")
-        return json.dumps(results, ensure_ascii=False)
+        return results  # Return list, not JSON string
     except Exception as e:
         import traceback
         print(f"❌ Twitter intelligent analysis failed: {e}")
@@ -274,7 +284,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                 }
             })
         
-        return json.dumps(fallback_analysis, ensure_ascii=False)
+        return fallback_analysis  # Return list, not JSON string
 
 
 def analyze_with_sample_tweets():
