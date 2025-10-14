@@ -840,13 +840,15 @@ def result_view(request):
     print(twitter_analysis)
 
     instagram_analysis = get_or_set_analysis('instagram')
+    if instagram_analysis is None:
+        instagram_analysis = []
     print('DEBUG: instagram_analysis from session:', request.session.get('instagram_analysis'))
     from django.core.cache import cache as debug_cache
     print('DEBUG: instagram_analysis from cache:', debug_cache.get(f'instagram_analysis_{user_id}'))
     print('DEBUG: instagram_analysis final value:', instagram_analysis)
     
     # Log first result for verification
-    if instagram_analysis and len(instagram_analysis) > 0:
+    if instagram_analysis and isinstance(instagram_analysis, list) and len(instagram_analysis) > 0:
         first_item = instagram_analysis[0]
         print(f"\n{'='*80}")
         print(f"📊 INSTAGRAM FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
@@ -855,18 +857,17 @@ def result_view(request):
             analysis_preview = json.dumps(first_item['analysis']['Instagram'], indent=2)[:200]
             print(f"{analysis_preview}...")
         print(f"{'='*80}\n")
-    
-    if instagram_analysis is None:
-        instagram_analysis = []
 
     linkedin_analysis = get_or_set_analysis('linkedin')
+    if linkedin_analysis is None:
+        linkedin_analysis = []
     print('DEBUG: linkedin_analysis from session:', request.session.get('linkedin_analysis'))
     print('DEBUG: linkedin_analysis final value:', linkedin_analysis)
     
     # Log first result for verification
     if linkedin_analysis and isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
         posts = linkedin_analysis['linkedin']
-        if len(posts) > 0:
+        if isinstance(posts, list) and len(posts) > 0:
             first_item = posts[0]
             print(f"\n{'='*80}")
             print(f"📊 LINKEDIN FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
@@ -875,9 +876,6 @@ def result_view(request):
                 analysis_preview = json.dumps(first_item['analysis']['LinkedIn'], indent=2)[:200]
                 print(f"{analysis_preview}...")
             print(f"{'='*80}\n")
-    
-    if linkedin_analysis is None:
-        linkedin_analysis = []
 
     facebook_analysis = get_or_set_analysis('facebook')
     print(facebook_analysis)
