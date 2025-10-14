@@ -105,7 +105,7 @@ def analyze_instagram_post(username):
     return result
 
 
-def analyze_all_platforms(user_id, instagram_username, linkedin_username, tiktok_username, facebook_username=None):
+def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitter_username, facebook_username=None):
     """
     Analyze all platforms using intelligent context-aware AI analysis.
     Returns real analysis results or error states (never dummy/fake data).
@@ -113,7 +113,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, tiktok
     """
     from .scraper.instagram import analyze_instagram_posts
     from .scraper.linkedin import analyze_linkedin_profile
-    from .scraper.tiktok import analyze_tiktok_profile
+    from .scraper.t import analyze_twitter_profile
     from .scraper.facebook import analyze_facebook_posts
     from .intelligent_analyzer import generate_profile_assessment
     from django.core.cache import cache
@@ -192,16 +192,16 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, tiktok
     results['linkedin'] = []  # Placeholder, actual results are cached from main thread
     print(f"DEBUG: LinkedIn data placeholder set (actual data is cached in main thread): {results['linkedin']}")
 
-    # TikTok
+    # Twitter
     try:
-        if tiktok_username:
-            results['tiktok'] = analyze_tiktok_profile(tiktok_username)
+        if twitter_username:
+            results['twitter'] = analyze_twitter_profile(twitter_username)
             
-            # Extract full name from scraped TikTok data (first video)
+            # Extract full name from scraped Twitter data (first post)
             scraped_full_name = "User"
-            if results['tiktok'] and len(results['tiktok']) > 0:
-                first_post = results['tiktok'][0]
-                # Try various field names for TikTok profile name
+            if results['twitter'] and len(results['twitter']) > 0:
+                first_post = results['twitter'][0]
+                # Try various field names for Twitter profile name
                 scraped_full_name = (
                     first_post.get('author_name') or 
                     first_post.get('user_name') or 
@@ -210,34 +210,34 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, tiktok
                 )
             
             # Generate profile assessment (username only)
-            profile_assessment = generate_profile_assessment("TikTok", tiktok_username)
-            results['tiktok_profile'] = {
-                'username': tiktok_username,
+            profile_assessment = generate_profile_assessment("X", twitter_username)
+            results['twitter_profile'] = {
+                'username': twitter_username,
                 'full_name': scraped_full_name,
                 'assessment': profile_assessment
             }
-            print(f"DEBUG: TikTok analysis result: {results['tiktok']}")
-            print(f"DEBUG: TikTok profile: @{tiktok_username}, Name: {scraped_full_name}")
+            print(f"DEBUG: Twitter analysis result: {results['twitter']}")
+            print(f"DEBUG: Twitter profile: @{twitter_username}, Name: {scraped_full_name}")
         else:
-            results['tiktok'] = []
+            results['twitter'] = []
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ TikTok analysis failed: {e}")
+        print(f"❌ Twitter analysis failed: {e}")
         print(f"Full traceback:\n{error_trace}")
         # Return proper error state (no fake data)
-        results['tiktok'] = [{
-            "post": f"⚠️ Unable to analyze TikTok account @{tiktok_username}",
+        results['twitter'] = [{
+            "tweet": f"⚠️ Unable to analyze Twitter account @{twitter_username}",
             "post_data": {
                 "caption": None,
                 "data_unavailable": True,
                 "error": str(e),
                 "error_type": "analysis_failed"
             },
-            "TikTok": {
+            "Twitter": {
                 "content_reinforcement": {
                     "status": "error",
-                    "reason": f"TikTok analysis unavailable: {str(e)[:100]}",
+                    "reason": f"Twitter analysis unavailable: {str(e)[:100]}",
                     "recommendation": "Try again later or check if account is accessible"
                 },
                 "content_suppression": {
@@ -253,10 +253,10 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, tiktok
                 "risk_score": -1
             }
         }]
-        print(f"DEBUG: TikTok error state set (no fake data)")
-    cache.set(f'tiktok_analysis_{user_id}', results['tiktok'], 3600)
-    if 'tiktok_profile' in results:
-        cache.set(f'tiktok_profile_{user_id}', results['tiktok_profile'], 3600)
+        print(f"DEBUG: Twitter error state set (no fake data)")
+    cache.set(f'twitter_analysis_{user_id}', results['twitter'], 3600)
+    if 'twitter_profile' in results:
+        cache.set(f'twitter_profile_{user_id}', results['twitter_profile'], 3600)
 
     # Facebook
     try:
