@@ -197,9 +197,35 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         if twitter_username:
             results['twitter'] = analyze_twitter_profile(twitter_username)
             
+            # Check if result is an error string (account doesn't exist)
+            if isinstance(results['twitter'], str):
+                print(f"⚠️  Twitter scraper returned error: {results['twitter'][:100]}")
+                # Convert error string to proper error state
+                results['twitter'] = [{
+                    "tweet": f"⚠️ Unable to analyze Twitter account @{twitter_username}",
+                    "post_data": {
+                        "caption": None,
+                        "data_unavailable": True,
+                        "error": results['twitter'],
+                        "error_type": "account_not_found"
+                    },
+                    "analysis": {
+                        "Twitter": {
+                            "content_reinforcement": {
+                                "status": "error",
+                                "reason": "Account not found or has no tweets",
+                                "recommendation": "Verify the username is correct and the account is public"
+                            },
+                            "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                            "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                            "risk_score": -1
+                        }
+                    }
+                }]
+            
             # Extract full name from scraped Twitter data (first post)
             scraped_full_name = "User"
-            if results['twitter'] and len(results['twitter']) > 0:
+            if isinstance(results['twitter'], list) and len(results['twitter']) > 0:
                 first_post = results['twitter'][0]
                 # Try various field names for Twitter profile name
                 scraped_full_name = (
@@ -216,7 +242,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
                 'full_name': scraped_full_name,
                 'assessment': profile_assessment
             }
-            print(f"DEBUG: Twitter analysis result: {results['twitter']}")
+            print(f"DEBUG: Twitter analysis result type: {type(results['twitter'])}, length: {len(results['twitter']) if isinstance(results['twitter'], list) else 'N/A'}")
             print(f"DEBUG: Twitter profile: @{twitter_username}, Name: {scraped_full_name}")
         else:
             results['twitter'] = []
