@@ -202,7 +202,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
                 print(f"⚠️  Twitter scraper returned error: {results['twitter'][:100]}")
                 # Convert error string to proper error state
                 results['twitter'] = [{
-                    "tweet": f"⚠️ Unable to analyze Twitter account @{twitter_username}",
+                    "post": f"⚠️ Unable to analyze Twitter account @{twitter_username}",  # Changed from "tweet" to "post"
                     "post_data": {
                         "caption": None,
                         "data_unavailable": True,
@@ -253,30 +253,32 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         print(f"Full traceback:\n{error_trace}")
         # Return proper error state (no fake data)
         results['twitter'] = [{
-            "tweet": f"⚠️ Unable to analyze Twitter account @{twitter_username}",
+            "post": f"⚠️ Unable to analyze Twitter account @{twitter_username}",  # Changed from "tweet" to "post"
             "post_data": {
                 "caption": None,
                 "data_unavailable": True,
                 "error": str(e),
                 "error_type": "analysis_failed"
             },
-            "Twitter": {
-                "content_reinforcement": {
-                    "status": "error",
-                    "reason": f"Twitter analysis unavailable: {str(e)[:100]}",
-                    "recommendation": "Try again later or check if account is accessible"
-                },
-                "content_suppression": {
-                    "status": "error",
-                    "reason": "No data available for assessment",
-                    "recommendation": None
-                },
-                "content_flag": {
-                    "status": "error",
-                    "reason": "Unable to flag content without data",
-                    "recommendation": None
-                },
-                "risk_score": -1
+            "analysis": {  # Added "analysis" wrapper
+                "Twitter": {
+                    "content_reinforcement": {
+                        "status": "error",
+                        "reason": f"Twitter analysis unavailable: {str(e)[:100]}",
+                        "recommendation": "Try again later or check if account is accessible"
+                    },
+                    "content_suppression": {
+                        "status": "error",
+                        "reason": "No data available for assessment",
+                        "recommendation": None
+                    },
+                    "content_flag": {
+                        "status": "error",
+                        "reason": "Unable to flag content without data",
+                        "recommendation": None
+                    },
+                    "risk_score": -1
+                }
             }
         }]
         print(f"DEBUG: Twitter error state set (no fake data)")

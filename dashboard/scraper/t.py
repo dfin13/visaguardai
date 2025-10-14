@@ -62,7 +62,8 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     actor_id = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
     run_input = {
         "searchTerms": [f"from:{username}"],
-        "maxTweets": tweets_desired,
+        "maxTweets": tweets_desired,  # Not actually enforced by actor
+        "maxItems": tweets_desired,  # REAL limit parameter that actor respects
         "addUserInfo": True,
         "includeSearchTerms": False,
         "onlyImage": False,
@@ -254,7 +255,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         fallback_analysis = []
         for tweet in tweets:
             fallback_analysis.append({
-                "tweet": tweet["tweet"],
+                "post": tweet["tweet"],  # Changed from "tweet" to "post" to match analyze_posts_batch structure
                 "post_data": {
                     'caption': tweet["tweet"],
                     'post_url': tweet.get("post_url", ""),
@@ -264,23 +265,25 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                     'shares_count': tweet.get("retweets", 0),
                     'data_unavailable': True,
                 },
-                "Twitter": {
-                    "content_reinforcement": {
-                        "status": "Needs Improvement",
-                        "reason": f"Analysis error: {str(e)[:80]}",
-                        "recommendation": "Try again later"
-                    },
-                    "content_suppression": {
-                        "status": "Caution",
-                        "reason": "Could not assess content",
-                        "recommendation": "Manual review recommended"
-                    },
-                    "content_flag": {
-                        "status": "Safe",
-                        "reason": "No data available",
-                        "recommendation": "Review manually"
-                    },
-                    "risk_score": -1
+                "analysis": {  # Added "analysis" wrapper to match template expectations
+                    "Twitter": {
+                        "content_reinforcement": {
+                            "status": "Needs Improvement",
+                            "reason": f"Analysis error: {str(e)[:80]}",
+                            "recommendation": "Try again later"
+                        },
+                        "content_suppression": {
+                            "status": "Caution",
+                            "reason": "Could not assess content",
+                            "recommendation": "Manual review recommended"
+                        },
+                        "content_flag": {
+                            "status": "Safe",
+                            "reason": "No data available",
+                            "recommendation": "Review manually"
+                        },
+                        "risk_score": -1
+                    }
                 }
             })
         
