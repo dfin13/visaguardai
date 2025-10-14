@@ -958,8 +958,9 @@ def result_view(request):
     warning_count = 0
     for item in twitter_analysis:
         try:
-            if isinstance(item, dict) and 'Twitter' in item:
-                risk_score = item['Twitter'].get('risk_score', 0)
+            # Correct data structure: item['analysis']['Twitter']
+            if isinstance(item, dict) and 'analysis' in item and 'Twitter' in item['analysis']:
+                risk_score = item['analysis']['Twitter'].get('risk_score', 0)
                 if risk_score == 0:
                     safe_count += 1
                 elif 1 <= risk_score <= 2:
