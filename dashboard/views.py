@@ -356,60 +356,7 @@ def start_analysis(request):
         # Set initial analysis stage
         cache.set(f'analysis_stage_{request.user.id}', 'starting', timeout=60*60)
         cache.set(f'stage_progress_{request.user.id}', 0, timeout=60*60)
-        
-        # --- Call analyze_linkedin_profile directly if linkedin_username is present ---
-        if linkedin_username:
-            try:
-                from .intelligent_analyzer import generate_profile_assessment
-                
-                cache.set(f'analysis_stage_{request.user.id}', 'linkedin_processing', timeout=60*60)
-                cache.set(f'stage_progress_{request.user.id}', 10, timeout=60*60)
-                
-                # Reduced to 3 posts for 40% faster processing (LinkedIn scraping is inherently slow)
-                linkedin_result = analyze_linkedin_profile(linkedin_username, limit=3)
-                cache.set(f'linkedin_analysis_{request.user.id}', linkedin_result, timeout=60*60)
-                
-                # Extract full name from scraped LinkedIn data
-                scraped_full_name = "User"
-                if linkedin_result and isinstance(linkedin_result, dict) and 'linkedin' in linkedin_result:
-                    linkedin_posts = linkedin_result['linkedin']
-                    if linkedin_posts and len(linkedin_posts) > 0:
-                        first_post = linkedin_posts[0]
-                        # Try various field names for LinkedIn profile name
-                        scraped_full_name = (
-                            first_post.get('author_name') or 
-                            first_post.get('user_name') or 
-                            first_post.get('profile_name') or 
-                            first_post.get('owner_full_name') or
-                            "User"
-                        )
-                
-                # Generate profile assessment (username only)
-                try:
-                    profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username)
-                    print(f"✅ Profile assessment generated: {profile_assessment[:100] if profile_assessment else 'None'}...")
-                except Exception as assess_error:
-                    print(f"⚠️  Profile assessment failed: {assess_error}, using fallback")
-                    profile_assessment = f"LinkedIn profile @{linkedin_username}"
-                
-                linkedin_profile = {
-                    'username': linkedin_username,
-                    'full_name': scraped_full_name,
-                    'assessment': profile_assessment
-                }
-                cache.set(f'linkedin_profile_{request.user.id}', linkedin_profile, timeout=60*60)
-                print(f"DEBUG: LinkedIn profile: {linkedin_username}, Name: {scraped_full_name}")
-            except Exception as e:
-                import traceback
-                print(f"❌ LinkedIn analysis failed: {e}")
-                print(f"Traceback: {traceback.format_exc()}")
-                # LinkedIn analysis failed; no fallback data generated
-                # The error will be handled by the frontend
-        # -----------------------------------------------------------------------------
-
-        # Update progress before starting background processing
-        cache.set(f'analysis_stage_{request.user.id}', 'background_processing', timeout=60*60)
-        cache.set(f'stage_progress_{request.user.id}', 30, timeout=60*60)
+        print(f"✅ Analysis initialization complete - starting background thread")
         
         # Start background processing for other platforms
         thread = threading.Thread(
