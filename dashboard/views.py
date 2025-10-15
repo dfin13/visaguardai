@@ -374,7 +374,13 @@ def start_analysis(request):
                         )
                 
                 # Generate profile assessment (username only)
-                profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username)
+                try:
+                    profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username)
+                    print(f"✅ Profile assessment generated: {profile_assessment[:100] if profile_assessment else 'None'}...")
+                except Exception as assess_error:
+                    print(f"⚠️  Profile assessment failed: {assess_error}, using fallback")
+                    profile_assessment = f"LinkedIn profile @{linkedin_username}"
+                
                 linkedin_profile = {
                     'username': linkedin_username,
                     'full_name': scraped_full_name,
@@ -404,8 +410,18 @@ def start_analysis(request):
         
         print(f"✅ Background thread started successfully")
         print(f"✅ Returning success response to frontend")
-            
-        return JsonResponse({'success': True, 'message': 'Analysis started successfully'})
+        
+        try:
+            response = JsonResponse({'success': True, 'message': 'Analysis started successfully'})
+            print(f"✅ JsonResponse created successfully")
+            return response
+        except Exception as json_error:
+            print(f"❌ JsonResponse creation failed: {json_error}")
+            import traceback
+            print(f"   Traceback: {traceback.format_exc()}")
+            # Return a basic response
+            from django.http import HttpResponse
+            return HttpResponse('{"success": true, "message": "Analysis started"}', content_type='application/json')
         
     except UserProfile.DoesNotExist:
         print(f"❌ UserProfile.DoesNotExist exception")
@@ -418,6 +434,7 @@ def start_analysis(request):
         print(f"   Type: {type(e).__name__}")
         print(f"   Traceback:\n{error_trace}")
         return JsonResponse({'success': False, 'error': str(e)})
+
 @login_required
 def dashboard(request):
     tweet_analysis = request.session.get('tweet_analysis')    
