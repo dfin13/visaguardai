@@ -648,74 +648,113 @@ def dashboard(request):
         'overall_risk_class': 'text-green-600 dark:text-green-400'
     }
     
-    if analysis_complete:
-        # Count posts per platform
-        instagram_count = len(request.session.get('instagram_analysis', []))
-        linkedin_count = len(request.session.get('linkedin_analysis', []))
-        twitter_count = len(twitter_analysis) if twitter_analysis and isinstance(twitter_analysis, list) else 0
-        facebook_count = len(request.session.get('facebook_analysis', []))
-        
-        preview_stats['total_posts'] = instagram_count + linkedin_count + twitter_count + facebook_count
-        
-        # Count platforms analyzed
-        if instagram_count > 0:
-            preview_stats['platforms_analyzed'] += 1
-        if linkedin_count > 0:
-            preview_stats['platforms_analyzed'] += 1
-        if twitter_count > 0:
-            preview_stats['platforms_analyzed'] += 1
-        if facebook_count > 0:
-            preview_stats['platforms_analyzed'] += 1
-        
-        # Count risk flags (posts with risk score > 20)
-        risk_flags = 0
-        max_risk_score = 0
-        
-        for post in request.session.get('instagram_analysis', []):
-            if isinstance(post, dict) and 'Instagram' in post:
-                score = post['Instagram'].get('risk_score', 0)
-                if score and score > 20:
-                    risk_flags += 1
-                if score and score > max_risk_score:
-                    max_risk_score = score
-        
-        for post in request.session.get('linkedin_analysis', []):
-            if isinstance(post, dict) and 'linkedin' in post:
-                score = post['linkedin'].get('risk_score', 0)
-                if score and score > 20:
-                    risk_flags += 1
-                if score and score > max_risk_score:
-                    max_risk_score = score
-        
-        if twitter_analysis and isinstance(twitter_analysis, list):
-            for post in twitter_analysis:
-                if isinstance(post, dict) and 'analysis' in post and 'Twitter' in post['analysis']:
-                    score = post['analysis']['Twitter'].get('risk_score', 0)
-                    if score and score > 20:
-                        risk_flags += 1
-                    if score and score > max_risk_score:
-                        max_risk_score = score
-        
-        for post in request.session.get('facebook_analysis', []):
-            if isinstance(post, dict) and 'Facebook' in post:
-                score = post['Facebook'].get('risk_score', 0)
-                if score and score > 20:
-                    risk_flags += 1
-                if score and score > max_risk_score:
-                    max_risk_score = score
-        
-        preview_stats['risk_flags'] = risk_flags
-        
-        # Determine overall risk level
-        if max_risk_score <= 9:
-            preview_stats['overall_risk'] = 'Low Risk'
-            preview_stats['overall_risk_class'] = 'text-green-600 dark:text-green-400'
-        elif max_risk_score <= 29:
-            preview_stats['overall_risk'] = 'Moderate Risk'
-            preview_stats['overall_risk_class'] = 'text-yellow-600 dark:text-yellow-400'
-        else:
-            preview_stats['overall_risk'] = 'High Risk'
-            preview_stats['overall_risk_class'] = 'text-red-600 dark:text-red-400'
+    try:
+        if analysis_complete:
+            # Count posts per platform (with safe defaults)
+            instagram_count = 0
+            linkedin_count = 0
+            twitter_count = 0
+            facebook_count = 0
+            
+            try:
+                instagram_analysis_data = request.session.get('instagram_analysis', [])
+                instagram_count = len(instagram_analysis_data) if isinstance(instagram_analysis_data, list) else 0
+            except:
+                pass
+            
+            try:
+                linkedin_analysis_data = request.session.get('linkedin_analysis', [])
+                linkedin_count = len(linkedin_analysis_data) if isinstance(linkedin_analysis_data, list) else 0
+            except:
+                pass
+            
+            try:
+                twitter_count = len(twitter_analysis) if twitter_analysis and isinstance(twitter_analysis, list) else 0
+            except:
+                pass
+            
+            try:
+                facebook_analysis_data = request.session.get('facebook_analysis', [])
+                facebook_count = len(facebook_analysis_data) if isinstance(facebook_analysis_data, list) else 0
+            except:
+                pass
+            
+            preview_stats['total_posts'] = instagram_count + linkedin_count + twitter_count + facebook_count
+            
+            # Count platforms analyzed
+            if instagram_count > 0:
+                preview_stats['platforms_analyzed'] += 1
+            if linkedin_count > 0:
+                preview_stats['platforms_analyzed'] += 1
+            if twitter_count > 0:
+                preview_stats['platforms_analyzed'] += 1
+            if facebook_count > 0:
+                preview_stats['platforms_analyzed'] += 1
+            
+            # Count risk flags (posts with risk score > 20)
+            risk_flags = 0
+            max_risk_score = 0
+            
+            try:
+                for post in request.session.get('instagram_analysis', []):
+                    if isinstance(post, dict) and 'Instagram' in post:
+                        score = post['Instagram'].get('risk_score', 0)
+                        if score and score > 20:
+                            risk_flags += 1
+                        if score and score > max_risk_score:
+                            max_risk_score = score
+            except:
+                pass
+            
+            try:
+                for post in request.session.get('linkedin_analysis', []):
+                    if isinstance(post, dict) and 'linkedin' in post:
+                        score = post['linkedin'].get('risk_score', 0)
+                        if score and score > 20:
+                            risk_flags += 1
+                        if score and score > max_risk_score:
+                            max_risk_score = score
+            except:
+                pass
+            
+            try:
+                if twitter_analysis and isinstance(twitter_analysis, list):
+                    for post in twitter_analysis:
+                        if isinstance(post, dict) and 'analysis' in post and 'Twitter' in post['analysis']:
+                            score = post['analysis']['Twitter'].get('risk_score', 0)
+                            if score and score > 20:
+                                risk_flags += 1
+                            if score and score > max_risk_score:
+                                max_risk_score = score
+            except:
+                pass
+            
+            try:
+                for post in request.session.get('facebook_analysis', []):
+                    if isinstance(post, dict) and 'Facebook' in post:
+                        score = post['Facebook'].get('risk_score', 0)
+                        if score and score > 20:
+                            risk_flags += 1
+                        if score and score > max_risk_score:
+                            max_risk_score = score
+            except:
+                pass
+            
+            preview_stats['risk_flags'] = risk_flags
+            
+            # Determine overall risk level
+            if max_risk_score <= 9:
+                preview_stats['overall_risk'] = 'Low Risk'
+                preview_stats['overall_risk_class'] = 'text-green-600 dark:text-green-400'
+            elif max_risk_score <= 29:
+                preview_stats['overall_risk'] = 'Moderate Risk'
+                preview_stats['overall_risk_class'] = 'text-yellow-600 dark:text-yellow-400'
+            else:
+                preview_stats['overall_risk'] = 'High Risk'
+                preview_stats['overall_risk_class'] = 'text-red-600 dark:text-red-400'
+    except Exception as e:
+        print(f"⚠️  Preview stats calculation error (non-critical): {e}")
+        # Use safe defaults on error
     
 
     config = Config.objects.first()  # Always fetch latest config
