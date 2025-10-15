@@ -170,15 +170,11 @@ def check_analysis_progress(request):
         from django.core.cache import cache
         
         # Check cache for analysis results
-        try:
-            user_profile = UserProfile.objects.get(user=request.user)
-            instagram_username = user_profile.instagram
-            linkedin_username = user_profile.linkedin
-            twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
-            facebook_username = user_profile.facebook
-        except UserProfile.DoesNotExist:
-            print(f"⚠️  UserProfile not found for user {request.user.id} in check_analysis_progress")
-            return JsonResponse({'error': 'User profile not found'}, status=404)
+        user_profile = request.user.userprofile
+        instagram_username = user_profile.instagram
+        linkedin_username = user_profile.linkedin
+        twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
+        facebook_username = user_profile.facebook
 
         instagram_result = cache.get(f'instagram_analysis_{request.user.id}')
         linkedin_result = cache.get(f'linkedin_analysis_{request.user.id}')
@@ -268,13 +264,6 @@ def check_analysis_progress(request):
             'facebook_done': facebook_done
         })
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ EXCEPTION IN CHECK_ANALYSIS_PROGRESS:")
-        print(f"   User: {request.user.id if request.user.is_authenticated else 'Anonymous'}")
-        print(f"   Error: {e}")
-        print(f"   Type: {type(e).__name__}")
-        print(f"   Traceback:\n{error_trace}")
         return JsonResponse({'error': str(e)}, status=500)
 
 import threading
@@ -356,7 +345,54 @@ def start_analysis(request):
         # Set initial analysis stage
         cache.set(f'analysis_stage_{request.user.id}', 'starting', timeout=60*60)
         cache.set(f'stage_progress_{request.user.id}', 0, timeout=60*60)
-        print(f"✅ Analysis initialization complete - starting background thread")
+        
+        # --- Call analyze_linkedin_profile directly if linkedin_username is present ---
+        if linkedin_username:
+            try:
+                from .intelligent_analyzer import generate_profile_assessment
+                
+                cache.set(f'analysis_stage_{request.user.id}', 'linkedin_processing', timeout=60*60)
+                cache.set(f'stage_progress_{request.user.id}', 10, timeout=60*60)
+                
+                # Reduced to 3 posts for 40% faster processing (LinkedIn scraping is inherently slow)
+                linkedin_result = analyze_linkedin_profile(linkedin_username, limit=3)
+                cache.set(f'linkedin_analysis_{request.user.id}', linkedin_result, timeout=60*60)
+                
+                # Extract full name from scraped LinkedIn data
+                scraped_full_name = "User"
+                if linkedin_result and isinstance(linkedin_result, dict) and 'linkedin' in linkedin_result:
+                    linkedin_posts = linkedin_result['linkedin']
+                    if linkedin_posts and len(linkedin_posts) > 0:
+                        first_post = linkedin_posts[0]
+                        # Try various field names for LinkedIn profile name
+                        scraped_full_name = (
+                            first_post.get('author_name') or 
+                            first_post.get('user_name') or 
+                            first_post.get('profile_name') or 
+                            first_post.get('owner_full_name') or
+                            "User"
+                        )
+                
+                # Generate profile assessment (username only)
+                profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username)
+                linkedin_profile = {
+                    'username': linkedin_username,
+                    'full_name': scraped_full_name,
+                    'assessment': profile_assessment
+                }
+                cache.set(f'linkedin_profile_{request.user.id}', linkedin_profile, timeout=60*60)
+                print(f"DEBUG: LinkedIn profile: {linkedin_username}, Name: {scraped_full_name}")
+            except Exception as e:
+                import traceback
+                print(f"❌ LinkedIn analysis failed: {e}")
+                print(f"Traceback: {traceback.format_exc()}")
+                # LinkedIn analysis failed; no fallback data generated
+                # The error will be handled by the frontend
+        # -----------------------------------------------------------------------------
+
+        # Update progress before starting background processing
+        cache.set(f'analysis_stage_{request.user.id}', 'background_processing', timeout=60*60)
+        cache.set(f'stage_progress_{request.user.id}', 30, timeout=60*60)
         
         # Start background processing for other platforms
         thread = threading.Thread(
@@ -365,34 +401,13 @@ def start_analysis(request):
         )
         thread.daemon = False  # Changed from True - allow thread to complete even after response
         thread.start()
-        
-        print(f"✅ Background thread started successfully")
-        print(f"✅ Returning success response to frontend")
-        
-        try:
-            response = JsonResponse({'success': True, 'message': 'Analysis started successfully'})
-            print(f"✅ JsonResponse created successfully")
-            return response
-        except Exception as json_error:
-            print(f"❌ JsonResponse creation failed: {json_error}")
-            import traceback
-            print(f"   Traceback: {traceback.format_exc()}")
-            # Return a basic response
-            from django.http import HttpResponse
-            return HttpResponse('{"success": true, "message": "Analysis started"}', content_type='application/json')
+            
+        return JsonResponse({'success': True, 'message': 'Analysis started successfully'})
         
     except UserProfile.DoesNotExist:
-        print(f"❌ UserProfile.DoesNotExist exception")
         return JsonResponse({'success': False, 'error': 'User profile not found.'})
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ EXCEPTION IN START_ANALYSIS:")
-        print(f"   Error: {e}")
-        print(f"   Type: {type(e).__name__}")
-        print(f"   Traceback:\n{error_trace}")
         return JsonResponse({'success': False, 'error': str(e)})
-
 @login_required
 def dashboard(request):
     tweet_analysis = request.session.get('tweet_analysis')    
@@ -624,6 +639,84 @@ def dashboard(request):
         or (request.session.get('facebook_analysis') is not None and len(request.session.get('facebook_analysis')) > 0)
     )
     
+    # Calculate preview stats for blurred preview section
+    preview_stats = {
+        'total_posts': 0,
+        'platforms_analyzed': 0,
+        'risk_flags': 0,
+        'overall_risk': 'Low Risk',
+        'overall_risk_class': 'text-green-600 dark:text-green-400'
+    }
+    
+    if analysis_complete:
+        # Count posts per platform
+        instagram_count = len(request.session.get('instagram_analysis', []))
+        linkedin_count = len(request.session.get('linkedin_analysis', []))
+        twitter_count = len(twitter_analysis) if twitter_analysis and isinstance(twitter_analysis, list) else 0
+        facebook_count = len(request.session.get('facebook_analysis', []))
+        
+        preview_stats['total_posts'] = instagram_count + linkedin_count + twitter_count + facebook_count
+        
+        # Count platforms analyzed
+        if instagram_count > 0:
+            preview_stats['platforms_analyzed'] += 1
+        if linkedin_count > 0:
+            preview_stats['platforms_analyzed'] += 1
+        if twitter_count > 0:
+            preview_stats['platforms_analyzed'] += 1
+        if facebook_count > 0:
+            preview_stats['platforms_analyzed'] += 1
+        
+        # Count risk flags (posts with risk score > 20)
+        risk_flags = 0
+        max_risk_score = 0
+        
+        for post in request.session.get('instagram_analysis', []):
+            if isinstance(post, dict) and 'Instagram' in post:
+                score = post['Instagram'].get('risk_score', 0)
+                if score and score > 20:
+                    risk_flags += 1
+                if score and score > max_risk_score:
+                    max_risk_score = score
+        
+        for post in request.session.get('linkedin_analysis', []):
+            if isinstance(post, dict) and 'linkedin' in post:
+                score = post['linkedin'].get('risk_score', 0)
+                if score and score > 20:
+                    risk_flags += 1
+                if score and score > max_risk_score:
+                    max_risk_score = score
+        
+        if twitter_analysis and isinstance(twitter_analysis, list):
+            for post in twitter_analysis:
+                if isinstance(post, dict) and 'analysis' in post and 'Twitter' in post['analysis']:
+                    score = post['analysis']['Twitter'].get('risk_score', 0)
+                    if score and score > 20:
+                        risk_flags += 1
+                    if score and score > max_risk_score:
+                        max_risk_score = score
+        
+        for post in request.session.get('facebook_analysis', []):
+            if isinstance(post, dict) and 'Facebook' in post:
+                score = post['Facebook'].get('risk_score', 0)
+                if score and score > 20:
+                    risk_flags += 1
+                if score and score > max_risk_score:
+                    max_risk_score = score
+        
+        preview_stats['risk_flags'] = risk_flags
+        
+        # Determine overall risk level
+        if max_risk_score <= 9:
+            preview_stats['overall_risk'] = 'Low Risk'
+            preview_stats['overall_risk_class'] = 'text-green-600 dark:text-green-400'
+        elif max_risk_score <= 29:
+            preview_stats['overall_risk'] = 'Moderate Risk'
+            preview_stats['overall_risk_class'] = 'text-yellow-600 dark:text-yellow-400'
+        else:
+            preview_stats['overall_risk'] = 'High Risk'
+            preview_stats['overall_risk_class'] = 'text-red-600 dark:text-red-400'
+    
 
     config = Config.objects.first()  # Always fetch latest config
     # Always provide a non-empty Stripe publishable key for Stripe.js
@@ -654,6 +747,7 @@ def dashboard(request):
         'price_cents': config.Price if config else 0,
         'facebook_analysis': request.session.get('facebook_analysis'),
         'profile': UserProfile.objects.get(user=request.user),
+        'preview_stats': preview_stats,
     }
 
     return render(request, 'dashboard/dashboard.html', context)
