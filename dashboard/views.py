@@ -768,6 +768,17 @@ def dashboard(request):
             stripe_publishable_key = 'pk_test_placeholder'  # fallback test key or show error
     else:
         stripe_publishable_key = 'pk_test_placeholder'  # fallback test key or show error
+    # DEBUG: Log template context for troubleshooting
+    print(f"\n{'='*80}")
+    print(f"🔍 DASHBOARD TEMPLATE CONTEXT DEBUG")
+    print(f"{'='*80}")
+    print(f"  analysis_complete: {analysis_complete}")
+    print(f"  payment_completed: {payment_completed}")
+    print(f"  preview_stats: {preview_stats}")
+    print(f"  twitter_analysis: {len(request.session.get('twitter_analysis', [])) if isinstance(request.session.get('twitter_analysis'), list) else 'Not a list'}")
+    print(f"  Should show blurred preview: {analysis_complete and not payment_completed}")
+    print(f"{'='*80}\n")
+    
     context = {
         'user': request.user,
         'user_email': request.user.email,
