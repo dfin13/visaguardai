@@ -82,9 +82,11 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
         print(f"⏱️  Starting LinkedIn scraping for: {username} (limit: {limit} posts, capped at 10 max)")
         print(f"   Profile URL: https://www.linkedin.com/in/{username}/")
         print(f"   Mode: Latest posts only (no feed scanning)")
+        print(f"   Actor: apimaestro/linkedin-profile-posts (approved actor)")
         
+        # Use approved LinkedIn actor: apimaestro/linkedin-profile-posts
         # Add timeout to fail fast if actor hangs (max 60 seconds)
-        run = apify_client.actor("LQQIXN9Othf8f7R5n").call(
+        run = apify_client.actor("apimaestro/linkedin-profile-posts").call(
             run_input=run_input,
             timeout_secs=60  # Fail fast if it takes too long
         )

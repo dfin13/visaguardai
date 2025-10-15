@@ -49,36 +49,25 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
     # Cap limit at 10 posts maximum
     limit = min(limit, 10)
     
-    # Set progress stages
-    if user_id:
-        cache.set(f'analysis_stage_{user_id}', 'facebook_analysis', timeout=60*60)
-        cache.set(f'stage_progress_{user_id}', 0, timeout=60*60)
-
     # Ensure we always have a valid Facebook URL
     if username_or_url.startswith("http"):
         fb_url = username_or_url
     else:
         fb_url = f"https://www.facebook.com/{username_or_url}"
 
-    if user_id:
-        cache.set(f'analysis_stage_{user_id}', 'blueprint_scanning', timeout=60*60)
-        cache.set(f'stage_progress_{user_id}', 5, timeout=60*60)
-
     # ==== SCRAPE FACEBOOK POSTS ====
     run_input = {
         "startUrls": [{"url": fb_url}],
-        "resultsLimit": limit,
+        "resultsLimit": limit,  # Hard limit: max 10 posts
         "scrapePostsUntilDate": None,
-        "includeReactions": True,   # Enable to get engagement data
-        "includeComments": True,    # Enable to get comment counts
+        "includeReactions": True,   # Enable to get engagement data (likes count)
         "includePostUrls": True     # Enable to get post URLs
+        # Comments not included - not used in analysis
     }
 
     print(f"Scraping up to {limit} Facebook posts for {fb_url}...")
-    
-    if user_id:
-        cache.set(f'analysis_stage_{user_id}', 'post_scanning', timeout=60*60)
-        cache.set(f'stage_progress_{user_id}', 10, timeout=60*60)
+    print(f"   Actor: apify/facebook-posts-scraper (approved actor)")
+    print(f"   Limit: {limit} posts (max 10)")
     
     try:
         from .account_checker import create_inaccessible_account_response

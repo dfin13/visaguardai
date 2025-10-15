@@ -62,8 +62,7 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     actor_id = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
     run_input = {
         "searchTerms": [f"from:{username}"],
-        "maxTweets": tweets_desired,  # Not actually enforced by actor
-        "maxItems": tweets_desired,  # REAL limit parameter that actor respects
+        "maxItems": tweets_desired,  # Enforces 10 tweet limit
         "addUserInfo": True,
         "includeSearchTerms": False,
         "onlyImage": False,

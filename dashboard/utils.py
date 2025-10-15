@@ -107,9 +107,10 @@ def analyze_instagram_post(username):
 
 def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitter_username, facebook_username=None):
     """
-    Analyze all platforms using intelligent context-aware AI analysis.
+    Analyze all platforms using intelligent context-aware AI analysis with parallel execution.
     Returns real analysis results or error states (never dummy/fake data).
     Each platform uses the intelligent_analyzer for unique, content-based assessments.
+    Platforms are analyzed concurrently for speed optimization.
     """
     from .scraper.instagram import analyze_instagram_posts
     from .scraper.linkedin import analyze_linkedin_profile
@@ -117,116 +118,123 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     from .scraper.facebook import analyze_facebook_posts
     from .intelligent_analyzer import generate_profile_assessment
     from django.core.cache import cache
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time
     
     results = {}
-    # Instagram - Process with detailed progress stages
-    import time
-    try:
+    
+    # Define platform analysis functions for parallel execution
+    def analyze_instagram():
         if instagram_username:
-            # Set detailed progress stages for Instagram analysis with delays
-            cache.set(f'analysis_stage_{user_id}', 'instagram_processing', timeout=60*60)
-            cache.set(f'stage_progress_{user_id}', 20, timeout=60*60)
-            time.sleep(2)  # 2 second delay to show progress
-            
-            # Blueprint scanning stage
-            cache.set(f'analysis_stage_{user_id}', 'blueprint_scanning', timeout=60*60)
-            cache.set(f'stage_progress_{user_id}', 55, timeout=60*60)
-            time.sleep(3)  # 3 second delay to show progress
-            
-            # Post scanning stage  
-            cache.set(f'analysis_stage_{user_id}', 'post_scanning', timeout=60*60)
-            cache.set(f'stage_progress_{user_id}', 70, timeout=60*60)
-            time.sleep(3)  # 3 second delay to show progress
-            
-            # Comment scanning stage
-            cache.set(f'analysis_stage_{user_id}', 'comment_scanning', timeout=60*60)
-            cache.set(f'stage_progress_{user_id}', 85, timeout=60*60)
-            time.sleep(2)  # 2 second delay to show progress
-            
-            results['instagram'] = analyze_instagram_posts(instagram_username)
-            
-            # Extract full name from scraped Instagram data (first post)
-            scraped_full_name = "User"
-            if results['instagram'] and len(results['instagram']) > 0:
-                first_post = results['instagram'][0]
-                if 'owner_full_name' in first_post:
-                    scraped_full_name = first_post['owner_full_name'] or "User"
-            
-            # Generate profile assessment (username only)
-            profile_assessment = generate_profile_assessment("Instagram", instagram_username)
-            results['instagram_profile'] = {
-                'username': instagram_username,
-                'full_name': scraped_full_name,
-                'assessment': profile_assessment
-            }
-            print(f"DEBUG: Instagram analysis result: {results['instagram']}")
-            print(f"DEBUG: Instagram profile: @{instagram_username}, Name: {scraped_full_name}")
-        else:
-            results['instagram'] = []
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ Instagram analysis FAILED: {e}")
-        print(f"Full error trace:\n{error_details}")
-        # Return error state instead of fake "safe" data
-        results['instagram'] = [{
-            "error": True,
-            "message": f"Instagram analysis failed: {str(e)}",
-            "post": f"⚠️ Unable to analyze Instagram account @{instagram_username}",
-            "analysis": {
-                "Instagram": {
-                    "content_reinforcement": {"status": "error", "recommendation": "Please try again", "reason": f"API error: {str(e)}"},
-                    "content_suppression": {"status": "error", "recommendation": None, "reason": "Analysis unavailable"},
-                    "content_flag": {"status": "error", "recommendation": None, "reason": "Analysis unavailable"},
-                    "risk_score": -1
-                }
-            }
-        }]
-        print(f"DEBUG: Instagram error state set (not fake safe data)")
-    cache.set(f'instagram_analysis_{user_id}', results['instagram'], 3600)
-    if 'instagram_profile' in results:
-        cache.set(f'instagram_profile_{user_id}', results['instagram_profile'], 3600)
-
-    # LinkedIn - Skip since it's already processed in the main thread
-    # LinkedIn analysis is handled directly in start_analysis() to avoid duplication
-    results['linkedin'] = []  # Placeholder, actual results are cached from main thread
-    print(f"DEBUG: LinkedIn data placeholder set (actual data is cached in main thread): {results['linkedin']}")
-
-    # Twitter
-    try:
+            cache.set(f'analysis_stage_{user_id}', 'analyzing_instagram', timeout=60*60)
+            cache.set(f'stage_progress_{user_id}', 25, timeout=60*60)
+            return ('instagram', analyze_instagram_posts(instagram_username))
+        return ('instagram', [])
+    
+    def analyze_linkedin():
+        if linkedin_username:
+            cache.set(f'analysis_stage_{user_id}', 'analyzing_linkedin', timeout=60*60)
+            cache.set(f'stage_progress_{user_id}', 50, timeout=60*60)
+            return ('linkedin', analyze_linkedin_profile(linkedin_username))
+        return ('linkedin', [])
+    
+    def analyze_twitter():
         if twitter_username:
-            results['twitter'] = analyze_twitter_profile(twitter_username)
-            
-            # Check if result is an error string (account doesn't exist)
-            if isinstance(results['twitter'], str):
-                print(f"⚠️  Twitter scraper returned error: {results['twitter'][:100]}")
-                # Convert error string to proper error state
-                results['twitter'] = [{
-                    "post": f"⚠️ Unable to analyze Twitter account @{twitter_username}",  # Changed from "tweet" to "post"
-                    "post_data": {
-                        "caption": None,
-                        "data_unavailable": True,
-                        "error": results['twitter'],
-                        "error_type": "account_not_found"
-                    },
-                    "analysis": {
-                        "Twitter": {
-                            "content_reinforcement": {
-                                "status": "error",
-                                "reason": "Account not found or has no tweets",
-                                "recommendation": "Verify the username is correct and the account is public"
-                            },
-                            "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
-                            "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
-                            "risk_score": -1
-                        }
+            cache.set(f'analysis_stage_{user_id}', 'analyzing_twitter', timeout=60*60)
+            cache.set(f'stage_progress_{user_id}', 75, timeout=60*60)
+            return ('twitter', analyze_twitter_profile(twitter_username))
+        return ('twitter', [])
+    
+    def analyze_facebook():
+        if facebook_username:
+            cache.set(f'analysis_stage_{user_id}', 'analyzing_facebook', timeout=60*60)
+            cache.set(f'stage_progress_{user_id}', 90, timeout=60*60)
+            return ('facebook', analyze_facebook_posts(facebook_username, limit=10, user_id=user_id))
+        return ('facebook', [])
+    
+    # Execute all platform analyses in parallel
+    print(f"🚀 Starting parallel analysis for user {user_id}")
+    start_time = time.time()
+    
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        # Submit all platform tasks
+        futures = []
+        if instagram_username:
+            futures.append(executor.submit(analyze_instagram))
+        if linkedin_username:
+            futures.append(executor.submit(analyze_linkedin))
+        if twitter_username:
+            futures.append(executor.submit(analyze_twitter))
+        if facebook_username:
+            futures.append(executor.submit(analyze_facebook))
+        
+        # Collect results as they complete
+        for future in as_completed(futures):
+            try:
+                platform_name, platform_result = future.result()
+                results[platform_name] = platform_result
+                print(f"✅ {platform_name.title()} analysis completed")
+            except Exception as e:
+                print(f"❌ Platform analysis error: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    elapsed = time.time() - start_time
+    print(f"⏱️  Parallel analysis completed in {elapsed:.2f} seconds")
+    
+    # Process Instagram results and generate profile
+    if instagram_username and 'instagram' in results:
+        # Extract full name from scraped Instagram data (first post)
+        scraped_full_name = "User"
+        if results.get('instagram') and len(results['instagram']) > 0:
+            first_post = results['instagram'][0]
+            if isinstance(first_post, dict) and 'owner_full_name' in first_post:
+                scraped_full_name = first_post['owner_full_name'] or "User"
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("Instagram", instagram_username)
+        results['instagram_profile'] = {
+            'username': instagram_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
+        cache.set(f'instagram_profile_{user_id}', results['instagram_profile'], 3600)
+    
+    # Process Twitter results and generate profile
+    if twitter_username and 'twitter' in results:
+        twitter_result = results.get('twitter')
+        
+        # Check if result is an error string (account doesn't exist)
+        if isinstance(twitter_result, str):
+            print(f"⚠️  Twitter scraper returned error: {twitter_result[:100]}")
+            # Convert error string to proper error state
+            results['twitter'] = [{
+                "post": f"⚠️ Unable to analyze Twitter account @{twitter_username}",
+                "post_data": {
+                    "caption": None,
+                    "data_unavailable": True,
+                    "error": twitter_result,
+                    "error_type": "account_not_found"
+                },
+                "analysis": {
+                    "Twitter": {
+                        "content_reinforcement": {
+                            "status": "error",
+                            "reason": "Account not found or has no tweets",
+                            "recommendation": "Verify the username is correct and the account is public"
+                        },
+                        "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                        "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                        "risk_score": -1
                     }
-                }]
-            
-            # Extract full name from scraped Twitter data (first post)
-            scraped_full_name = "User"
-            if isinstance(results['twitter'], list) and len(results['twitter']) > 0:
-                first_post = results['twitter'][0]
+                }
+            }]
+        
+        # Extract full name from scraped Twitter data (first post)
+        scraped_full_name = "User"
+        if isinstance(results.get('twitter'), list) and len(results['twitter']) > 0:
+            first_post = results['twitter'][0]
+            if isinstance(first_post, dict):
                 # Try various field names for Twitter profile name
                 scraped_full_name = (
                     first_post.get('author_name') or 
@@ -234,129 +242,53 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
                     first_post.get('profile_name') or 
                     "User"
                 )
-            
-            # Generate profile assessment (username only)
-            profile_assessment = generate_profile_assessment("X", twitter_username)
-            results['twitter_profile'] = {
-                'username': twitter_username,
-                'full_name': scraped_full_name,
-                'assessment': profile_assessment
-            }
-            print(f"DEBUG: Twitter analysis result type: {type(results['twitter'])}, length: {len(results['twitter']) if isinstance(results['twitter'], list) else 'N/A'}")
-            print(f"DEBUG: Twitter profile: @{twitter_username}, Name: {scraped_full_name}")
-        else:
-            results['twitter'] = []
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ Twitter analysis failed: {e}")
-        print(f"Full traceback:\n{error_trace}")
-        # Return proper error state (no fake data)
-        results['twitter'] = [{
-            "post": f"⚠️ Unable to analyze Twitter account @{twitter_username}",  # Changed from "tweet" to "post"
-            "post_data": {
-                "caption": None,
-                "data_unavailable": True,
-                "error": str(e),
-                "error_type": "analysis_failed"
-            },
-            "analysis": {  # Added "analysis" wrapper
-                "Twitter": {
-                    "content_reinforcement": {
-                        "status": "error",
-                        "reason": f"Twitter analysis unavailable: {str(e)[:100]}",
-                        "recommendation": "Try again later or check if account is accessible"
-                    },
-                    "content_suppression": {
-                        "status": "error",
-                        "reason": "No data available for assessment",
-                        "recommendation": None
-                    },
-                    "content_flag": {
-                        "status": "error",
-                        "reason": "Unable to flag content without data",
-                        "recommendation": None
-                    },
-                    "risk_score": -1
-                }
-            }
-        }]
-        print(f"DEBUG: Twitter error state set (no fake data)")
-    cache.set(f'twitter_analysis_{user_id}', results['twitter'], 3600)
-    if 'twitter_profile' in results:
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("X", twitter_username)
+        results['twitter_profile'] = {
+            'username': twitter_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
         cache.set(f'twitter_profile_{user_id}', results['twitter_profile'], 3600)
-
-    # Facebook
-    try:
-        if facebook_username:
-            results['facebook'] = analyze_facebook_posts(facebook_username, limit=5, user_id=user_id)
-            
-            # Extract full name from scraped Facebook data
-            scraped_full_name = "User"
-            if results['facebook'] and isinstance(results['facebook'], dict) and 'facebook' in results['facebook']:
-                fb_posts = results['facebook']['facebook']
-                if fb_posts and len(fb_posts) > 0:
-                    first_post = fb_posts[0]
-                    # Try various field names for Facebook profile name
-                    scraped_full_name = (
-                        first_post.get('author_name') or 
-                        first_post.get('user_name') or 
-                        first_post.get('profile_name') or 
-                        first_post.get('owner_full_name') or
-                        "User"
-                    )
-            
-            # Generate profile assessment (username only)
-            profile_assessment = generate_profile_assessment("Facebook", facebook_username)
-            results['facebook_profile'] = {
-                'username': facebook_username,
-                'full_name': scraped_full_name,
-                'assessment': profile_assessment
-            }
-            print(f"DEBUG: Facebook analysis result: {results['facebook']}")
-            print(f"DEBUG: Facebook profile: {facebook_username}, Name: {scraped_full_name}")
-            print(f"DEBUG: Facebook data before caching: {results['facebook']}")
-        else:
-            results['facebook'] = []
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ Facebook analysis failed: {e}")
-        print(f"Full traceback:\n{error_trace}")
-        # Return proper error state (no fake data)
-        results['facebook'] = [{
-            "post": f"⚠️ Unable to analyze Facebook account {facebook_username}",
-            "post_data": {
-                "caption": None,
-                "data_unavailable": True,
-                "error": str(e),
-                "error_type": "analysis_failed"
-            },
-            "Facebook": {
-                "content_reinforcement": {
-                    "status": "error",
-                    "reason": f"Facebook analysis unavailable: {str(e)[:100]}",
-                    "recommendation": "Try again later or check if account is accessible"
-                },
-                "content_suppression": {
-                    "status": "error",
-                    "reason": "No data available for assessment",
-                    "recommendation": None
-                },
-                "content_flag": {
-                    "status": "error",
-                    "reason": "Unable to flag content without data",
-                    "recommendation": None
-                },
-                "risk_score": -1
-            }
-        }]
-        print(f"DEBUG: Facebook error state set (no fake data)")
-        print(f"DEBUG: Facebook data before caching: {results['facebook']}")
-    cache.set(f'facebook_analysis_{user_id}', results['facebook'], 3600)
-    if 'facebook_profile' in results:
+    
+    # Process Facebook results and generate profile
+    if facebook_username and 'facebook' in results:
+        # Extract full name from scraped Facebook data (first post)
+        scraped_full_name = "User"
+        if results.get('facebook') and len(results['facebook']) > 0:
+            first_post = results['facebook'][0]
+            if isinstance(first_post, dict):
+                scraped_full_name = (
+                    first_post.get('author_name') or 
+                    first_post.get('user_name') or 
+                    first_post.get('profile_name') or 
+                    "User"
+                )
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("Facebook", facebook_username)
+        results['facebook_profile'] = {
+            'username': facebook_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
         cache.set(f'facebook_profile_{user_id}', results['facebook_profile'], 3600)
-
+    
+    # Cache all results
+    if 'instagram' in results:
+        cache.set(f'instagram_analysis_{user_id}', results.get('instagram', []), 3600)
+    if 'twitter' in results:
+        cache.set(f'twitter_analysis_{user_id}', results.get('twitter', []), 3600)
+    if 'linkedin' in results:
+        cache.set(f'linkedin_analysis_{user_id}', results.get('linkedin', []), 3600)
+    if 'facebook' in results:
+        cache.set(f'facebook_analysis_{user_id}', results.get('facebook', []), 3600)
+    
+    # Set completion stage
+    cache.set(f'analysis_stage_{user_id}', 'complete', timeout=60*60)
+    cache.set(f'stage_progress_{user_id}', 100, timeout=60*60)
+    
     return results
 
 
