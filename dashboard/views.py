@@ -401,12 +401,22 @@ def start_analysis(request):
         )
         thread.daemon = False  # Changed from True - allow thread to complete even after response
         thread.start()
+        
+        print(f"✅ Background thread started successfully")
+        print(f"✅ Returning success response to frontend")
             
         return JsonResponse({'success': True, 'message': 'Analysis started successfully'})
         
     except UserProfile.DoesNotExist:
+        print(f"❌ UserProfile.DoesNotExist exception")
         return JsonResponse({'success': False, 'error': 'User profile not found.'})
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ EXCEPTION IN START_ANALYSIS:")
+        print(f"   Error: {e}")
+        print(f"   Type: {type(e).__name__}")
+        print(f"   Traceback:\n{error_trace}")
         return JsonResponse({'success': False, 'error': str(e)})
 @login_required
 def dashboard(request):
