@@ -974,25 +974,6 @@ def result_view(request):
     twitter_profile = get_profile_summary('twitter')
     facebook_profile = get_profile_summary('facebook')
     
-    # DEBUG: Check what we're passing to template
-    print(f"\n{'='*80}")
-    print(f"🔍 RESULT_VIEW DEBUG - TEMPLATE DATA")
-    print(f"{'='*80}")
-    print(f"twitter_analysis type: {type(twitter_analysis)}")
-    print(f"twitter_analysis length: {len(twitter_analysis) if isinstance(twitter_analysis, list) else 'N/A'}")
-    if isinstance(twitter_analysis, list) and len(twitter_analysis) > 0:
-        print(f"First item keys: {twitter_analysis[0].keys() if isinstance(twitter_analysis[0], dict) else 'N/A'}")
-        if isinstance(twitter_analysis[0], dict):
-            print(f"Has 'post': {'post' in twitter_analysis[0]}")
-            print(f"Has 'analysis': {'analysis' in twitter_analysis[0]}")
-            if 'post' in twitter_analysis[0]:
-                print(f"Post content: {twitter_analysis[0]['post'][:100] if twitter_analysis[0]['post'] else 'None'}")
-            if 'analysis' in twitter_analysis[0]:
-                print(f"Analysis type: {type(twitter_analysis[0]['analysis'])}")
-                if isinstance(twitter_analysis[0]['analysis'], dict):
-                    print(f"Analysis keys: {twitter_analysis[0]['analysis'].keys()}")
-    print(f"{'='*80}\n")
-    
     context = {
         'twitter_analyses': twitter_analysis,
         'safe_count': safe_count,

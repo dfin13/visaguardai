@@ -379,6 +379,20 @@ This is a lifestyle/visual platform. Apply balanced assessment:
 • Professional, educational, or community content should be recognized
 • Nightlife, parties, or risky activities warrant moderate to high scrutiny
 """
+    elif platform == "Twitter":
+        platform_guidance = """
+🐦 TWITTER/X PLATFORM NOTICE:
+This is a public discourse platform. Focus on tweet-specific characteristics:
+• Evaluate TONE: Is it professional, casual, inflammatory, or divisive?
+• Assess CLARITY: Are tweets clear and constructive, or vague and ambiguous?
+• Check for CONTROVERSY: Political statements, inflammatory language, or polarizing content?
+• Review PROFESSIONALISM: Does the tweet reflect maturity and thoughtfulness?
+• Do NOT mention "captions" (tweets don't have captions)
+• Do NOT focus on "community engagement" metrics unless exceptionally relevant
+• DO evaluate the message itself: what does this tweet communicate about the person?
+• Short tweets are normal - don't penalize brevity unless it creates ambiguity
+• Allow full A-F grade range: thoughtful discourse = A grades, inflammatory/unclear = lower grades
+"""
     
     # Build comprehensive prompt
     prompt = f"""You are a visa application coach conducting a critical review of social media content that will be scrutinized by immigration officers.
