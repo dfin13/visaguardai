@@ -625,38 +625,104 @@ def analyze_post_intelligent(platform, post_data, retry_count=0):
         }
 
 
-def analyze_posts_batch(platform, posts_data_list):
+def analyze_posts_batch(platform, posts_data_list, max_concurrent=5):
     """
-    Analyze multiple posts for a platform.
+    Analyze multiple posts for a platform with concurrent AI processing.
     
     Args:
         platform: str - Platform name
         posts_data_list: list - List of post metadata dicts
+        max_concurrent: int - Max concurrent AI calls (default: 5, safe for rate limits)
     
     Returns:
-        list - List of analyzed posts with full post_data and analysis
+        list - List of analyzed posts with full post_data and analysis (in original order)
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time
+    
+    if not posts_data_list:
+        return []
+    
     results = []
+    num_posts = len(posts_data_list)
     
-    for i, post_data in enumerate(posts_data_list):
-        print(f"\n📊 Analyzing {platform} post {i+1}/{len(posts_data_list)}...")
-        
-        analysis = analyze_post_intelligent(platform, post_data)
-        
-        # Wrap analysis in platform key (preserve exact casing for consistency)
-        # Use the platform name as-is to ensure template compatibility
-        platform_key = platform  # Keep original casing (Instagram, LinkedIn, Twitter, etc.)
-        wrapped_analysis = {
-            platform_key: analysis
-        }
-        
-        results.append({
-            "post": post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or "[No text content]",
-            "post_data": post_data,
-            "analysis": wrapped_analysis
-        })
+    # Determine optimal worker count (cap at max_concurrent to avoid rate limits)
+    num_workers = min(max_concurrent, num_posts)
     
-    print(f"\n✅ Completed {platform} analysis: {len(results)} posts")
+    print(f"\n🚀 Starting concurrent analysis for {num_posts} {platform} posts (max {num_workers} concurrent)")
+    start_time = time.time()
+    
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all posts for concurrent analysis
+        future_to_data = {}
+        for i, post_data in enumerate(posts_data_list):
+            print(f"📊 Submitting {platform} post {i+1}/{num_posts} for analysis...")
+            future = executor.submit(analyze_post_intelligent, platform, post_data)
+            future_to_data[future] = (i, post_data)
+        
+        # Collect results as they complete, storing by index
+        index_to_result = {}
+        completed_count = 0
+        
+        for future in as_completed(future_to_data):
+            i, post_data = future_to_data[future]
+            completed_count += 1
+            
+            try:
+                analysis = future.result()
+                
+                # Wrap analysis in platform key (preserve exact casing for consistency)
+                platform_key = platform  # Keep original casing (Instagram, LinkedIn, Twitter, etc.)
+                wrapped_analysis = {
+                    platform_key: analysis
+                }
+                
+                # Store result with index for later sorting
+                index_to_result[i] = {
+                    "post": post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or "[No text content]",
+                    "post_data": post_data,
+                    "analysis": wrapped_analysis
+                }
+                
+                print(f"✅ {platform} post {i+1}/{num_posts} analysis complete ({completed_count}/{num_posts} done)")
+                
+            except Exception as e:
+                print(f"❌ {platform} post {i+1} analysis failed: {e}")
+                
+                # Add error state for failed post
+                index_to_result[i] = {
+                    "post": post_data.get('caption') or post_data.get('text') or post_data.get('post_text') or "[Error analyzing post]",
+                    "post_data": post_data,
+                    "analysis": {
+                        platform: {
+                            "content_reinforcement": {
+                                "status": "error",
+                                "reason": f"Analysis failed: {str(e)[:100]}",
+                                "recommendation": "Try again later"
+                            },
+                            "content_suppression": {
+                                "status": "error",
+                                "reason": "Could not assess content",
+                                "recommendation": "Manual review recommended"
+                            },
+                            "content_flag": {
+                                "status": "error",
+                                "reason": "Unable to flag content",
+                                "recommendation": "Review manually"
+                            },
+                            "risk_score": -1
+                        }
+                    }
+                }
+    
+    # Return results in ORIGINAL ORDER (important for consistent display)
+    for i in sorted(index_to_result.keys()):
+        results.append(index_to_result[i])
+    
+    elapsed = time.time() - start_time
+    print(f"\n✅ Completed {platform} concurrent batch analysis: {len(results)} posts in {elapsed:.2f}s")
+    print(f"   Average: {elapsed/len(results):.2f}s per post (with {num_workers} concurrent workers)")
+    
     return results
 
 
