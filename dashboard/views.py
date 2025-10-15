@@ -170,11 +170,15 @@ def check_analysis_progress(request):
         from django.core.cache import cache
         
         # Check cache for analysis results
-        user_profile = request.user.userprofile
-        instagram_username = user_profile.instagram
-        linkedin_username = user_profile.linkedin
-        twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
-        facebook_username = user_profile.facebook
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            instagram_username = user_profile.instagram
+            linkedin_username = user_profile.linkedin
+            twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
+            facebook_username = user_profile.facebook
+        except UserProfile.DoesNotExist:
+            print(f"⚠️  UserProfile not found for user {request.user.id} in check_analysis_progress")
+            return JsonResponse({'error': 'User profile not found'}, status=404)
 
         instagram_result = cache.get(f'instagram_analysis_{request.user.id}')
         linkedin_result = cache.get(f'linkedin_analysis_{request.user.id}')
@@ -264,6 +268,13 @@ def check_analysis_progress(request):
             'facebook_done': facebook_done
         })
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ EXCEPTION IN CHECK_ANALYSIS_PROGRESS:")
+        print(f"   User: {request.user.id if request.user.is_authenticated else 'Anonymous'}")
+        print(f"   Error: {e}")
+        print(f"   Type: {type(e).__name__}")
+        print(f"   Traceback:\n{error_trace}")
         return JsonResponse({'error': str(e)}, status=500)
 
 import threading
