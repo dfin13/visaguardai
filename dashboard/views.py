@@ -311,38 +311,102 @@ def process_analysis_async(user_id, instagram_username, linkedin_username, twitt
 def validate_accounts(request):
     """
     Pre-scrape validation endpoint to check if accounts exist and are public.
-    Returns validation results for all connected accounts.
+    Can validate either:
+    1. All connected accounts from user profile (default)
+    2. A specific username passed in request body (validate_only mode)
     """
     try:
-        user_profile = UserProfile.objects.get(user=request.user)
+        import json
         
-        instagram_username = user_profile.instagram
-        linkedin_username = user_profile.linkedin
-        twitter_username = user_profile.twitter
-        facebook_username = user_profile.facebook
+        # Check if this is a single-username validation request
+        request_data = {}
+        if request.body:
+            try:
+                request_data = json.loads(request.body)
+            except:
+                pass
         
-        # Import validation function
-        from .validators import validate_all_accounts
+        validate_only = request_data.get('validate_only', False)
         
-        print(f"🔍 Validating accounts for user {request.user.username}")
-        print(f"   Instagram: {instagram_username or 'None'}")
-        print(f"   LinkedIn: {linkedin_username or 'None'}")
-        print(f"   Twitter: {twitter_username or 'None'}")
-        print(f"   Facebook: {facebook_username or 'None'}")
+        if validate_only:
+            # Validate specific username from request
+            platform = request_data.get('platform')
+            username = request_data.get('username')
+            
+            if not platform or not username:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Platform and username required for validation'
+                }, status=400)
+            
+            print(f"🔍 Validating single account: {platform} - {username}")
+            
+            # Import specific validator
+            from .validators import (
+                validate_instagram_account,
+                validate_linkedin_account,
+                validate_twitter_account,
+                validate_facebook_account
+            )
+            
+            validators = {
+                'instagram': validate_instagram_account,
+                'linkedin': validate_linkedin_account,
+                'twitter': validate_twitter_account,
+                'facebook': validate_facebook_account
+            }
+            
+            if platform not in validators:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Unknown platform: {platform}'
+                }, status=400)
+            
+            # Run validation
+            is_valid, message = validators[platform](username)
+            
+            return JsonResponse({
+                'success': True,
+                'all_valid': is_valid,
+                'results': {
+                    platform: {
+                        'valid': is_valid,
+                        'message': message
+                    }
+                }
+            })
         
-        # Run validation (lightweight 1-post test scrapes)
-        all_valid, results = validate_all_accounts(
-            instagram_username=instagram_username,
-            linkedin_username=linkedin_username,
-            twitter_username=twitter_username,
-            facebook_username=facebook_username
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'all_valid': all_valid,
-            'results': results
-        })
+        else:
+            # Validate all connected accounts from user profile
+            user_profile = UserProfile.objects.get(user=request.user)
+            
+            instagram_username = user_profile.instagram
+            linkedin_username = user_profile.linkedin
+            twitter_username = user_profile.twitter
+            facebook_username = user_profile.facebook
+            
+            # Import validation function
+            from .validators import validate_all_accounts
+            
+            print(f"🔍 Validating all accounts for user {request.user.username}")
+            print(f"   Instagram: {instagram_username or 'None'}")
+            print(f"   LinkedIn: {linkedin_username or 'None'}")
+            print(f"   Twitter: {twitter_username or 'None'}")
+            print(f"   Facebook: {facebook_username or 'None'}")
+            
+            # Run validation (lightweight 1-post test scrapes)
+            all_valid, results = validate_all_accounts(
+                instagram_username=instagram_username,
+                linkedin_username=linkedin_username,
+                twitter_username=twitter_username,
+                facebook_username=facebook_username
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'all_valid': all_valid,
+                'results': results
+            })
         
     except Exception as e:
         print(f"❌ Validation error: {e}")
