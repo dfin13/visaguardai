@@ -423,6 +423,8 @@ def validate_accounts(request):
         }, status=500)
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
 def start_analysis(request):
     print(f"\n{'='*80}")
     print(f"🚀 START_ANALYSIS REQUEST RECEIVED")
