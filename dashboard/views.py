@@ -191,10 +191,26 @@ def check_analysis_progress(request):
 
         # Determine overall progress and message based on detailed stages
         if instagram_done and linkedin_done and twitter_done and facebook_done:
+            # Debug: Log what's being copied from cache to session
+            print(f"🔄 Copying analysis results from cache to session:")
+            print(f"   Instagram: {len(instagram_result) if isinstance(instagram_result, list) else 'Not a list'}")
+            print(f"   LinkedIn: {len(linkedin_result) if isinstance(linkedin_result, list) else 'Not a list'}")
+            print(f"   Twitter: {len(twitter_result) if isinstance(twitter_result, list) else 'Not a list'}")
+            print(f"   Facebook: {len(facebook_result) if isinstance(facebook_result, list) else 'Not a list'}")
+            
             request.session['instagram_analysis'] = instagram_result
             request.session['linkedin_analysis'] = linkedin_result
             request.session['twitter_analysis'] = twitter_result
             request.session['facebook_analysis'] = facebook_result
+            request.session.modified = True  # Force session save
+            
+            # Debug: Verify session was updated
+            print(f"✅ Session updated:")
+            print(f"   Instagram in session: {len(request.session.get('instagram_analysis', [])) if isinstance(request.session.get('instagram_analysis'), list) else 'Not a list'}")
+            print(f"   LinkedIn in session: {len(request.session.get('linkedin_analysis', [])) if isinstance(request.session.get('linkedin_analysis'), list) else 'Not a list'}")
+            print(f"   Twitter in session: {len(request.session.get('twitter_analysis', [])) if isinstance(request.session.get('twitter_analysis'), list) else 'Not a list'}")
+            print(f"   Facebook in session: {len(request.session.get('facebook_analysis', [])) if isinstance(request.session.get('facebook_analysis'), list) else 'Not a list'}")
+            
             # Clear cache
             cache.delete(f'instagram_analysis_{request.user.id}')
             cache.delete(f'linkedin_analysis_{request.user.id}')
