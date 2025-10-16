@@ -44,6 +44,18 @@ def validate_instagram_account(username):
         if not results or len(results) == 0:
             return False, f"Instagram account @{username} is private or doesn't exist."
         
+        # Additional validation: check if first item has expected fields
+        first_item = results[0]
+        if not isinstance(first_item, dict):
+            return False, f"Instagram account @{username} returned invalid data."
+        
+        # Check for post indicators (caption, url, likes, etc.)
+        post_indicators = ['caption', 'url', 'likesCount', 'likes_count', 'ownerUsername', 'owner_username']
+        if not any(indicator in first_item for indicator in post_indicators):
+            print(f"❌ Instagram validation failed for @{username}: No valid post data")
+            print(f"   First item keys: {list(first_item.keys())}")
+            return False, f"Instagram account @{username} is private or doesn't exist."
+        
         print(f"✅ Instagram account @{username} validated successfully")
         return True, f"Successfully connected to Instagram (@{username})!"
         
@@ -76,22 +88,32 @@ def validate_linkedin_account(username):
         for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
             results.append(item)
         
-        # Check if we got any data (even 0 posts is OK if profile exists)
-        if not results:
+        # Check if we got any data
+        if not results or len(results) == 0:
             return False, f"LinkedIn profile '{username}' is private or doesn't exist."
         
-        # Check for common error indicators
+        # Check for valid post data
         first_item = results[0]
-        if isinstance(first_item, dict):
-            # If we got profile data, it's valid
-            if 'text' in first_item or 'postText' in first_item or 'post_text' in first_item:
-                print(f"✅ LinkedIn account {username} validated successfully")
-                return True, f"Successfully connected to LinkedIn ({username})!"
-            # Profile exists but no posts (still valid)
-            if 'error' not in str(first_item).lower():
-                print(f"✅ LinkedIn account {username} validated (no posts)")
+        if not isinstance(first_item, dict):
+            return False, f"LinkedIn profile '{username}' returned invalid data."
+        
+        # Check for actual post fields (indicates valid profile with posts)
+        if 'text' in first_item or 'postText' in first_item or 'post_text' in first_item:
+            print(f"✅ LinkedIn account {username} validated successfully")
+            return True, f"Successfully connected to LinkedIn ({username})!"
+        
+        # Check for profile-level fields (indicates profile exists even without posts)
+        profile_indicators = ['profileUrl', 'profile_url', 'url', 'actorRunUrl']
+        if any(indicator in first_item for indicator in profile_indicators):
+            # Additional check: make sure it's not an error response
+            error_indicators = ['error', 'failed', 'not found', 'does not exist', 'unavailable']
+            item_str = str(first_item).lower()
+            if not any(error in item_str for error in error_indicators):
+                print(f"✅ LinkedIn account {username} validated (profile exists)")
                 return True, f"Successfully connected to LinkedIn ({username})!"
         
+        print(f"❌ LinkedIn validation failed for {username}: No valid profile or post data found")
+        print(f"   First item keys: {list(first_item.keys())}")
         return False, f"LinkedIn profile '{username}' is private or doesn't exist."
         
     except Exception as e:
@@ -166,13 +188,27 @@ def validate_facebook_account(username):
         if not results or len(results) == 0:
             return False, f"Facebook page '{username}' is private or doesn't exist."
         
-        # Check for error indicators
+        # Check for valid post data
         first_item = results[0]
-        if isinstance(first_item, dict) and 'error' in str(first_item).lower():
+        if not isinstance(first_item, dict):
+            return False, f"Facebook page '{username}' returned invalid data."
+        
+        # Check for error indicators first
+        error_indicators = ['error', 'failed', 'not found', 'does not exist', 'unavailable', 'invalid']
+        item_str = str(first_item).lower()
+        if any(error in item_str for error in error_indicators):
             return False, f"Facebook page '{username}' is not accessible."
         
-        print(f"✅ Facebook account {username} validated successfully")
-        return True, f"Successfully connected to Facebook ({username})!"
+        # Check for actual post fields (indicates valid page with posts)
+        post_indicators = ['text', 'post_text', 'postText', 'caption', 'message', 'post_url']
+        if any(indicator in first_item for indicator in post_indicators):
+            print(f"✅ Facebook account {username} validated successfully")
+            return True, f"Successfully connected to Facebook ({username})!"
+        
+        # If no post fields found, it's likely invalid
+        print(f"❌ Facebook validation failed for {username}: No valid post data found")
+        print(f"   First item keys: {list(first_item.keys())}")
+        return False, f"Facebook page '{username}' is private or doesn't exist."
         
     except Exception as e:
         print(f"❌ Facebook validation error for {username}: {e}")
