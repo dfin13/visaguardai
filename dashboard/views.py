@@ -1071,10 +1071,7 @@ def result_view(request):
     instagram_analysis = sort_posts_chronologically(instagram_analysis)
     facebook_analysis = sort_posts_chronologically(facebook_analysis)
     twitter_analysis = sort_posts_chronologically(twitter_analysis)
-    
-    # LinkedIn has nested structure: {'linkedin': [posts]}
-    if isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
-        linkedin_analysis['linkedin'] = sort_posts_chronologically(linkedin_analysis['linkedin'])
+    linkedin_analysis = sort_posts_chronologically(linkedin_analysis)
     
     # Calculate stats
     safe_count = 0
