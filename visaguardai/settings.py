@@ -22,6 +22,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-^res4t=kku7n*d#m@ajk2&v=exf@!^71wbehih^zcvwd-okonl')
 
+# Field encryption key for encrypted model fields (API keys, secrets)
+# Must be a 32 url-safe base64-encoded bytes (Fernet key)
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', 'H6mpeKLeMEhUoxTnaNyY4m026T6fOX6y1ut6pLxABMk=')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
@@ -117,25 +122,16 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# Use SQLite for local development, PostgreSQL for production
-if os.getenv('USE_SQLITE', 'True') == 'True' or DEBUG:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME', 'visaguard_db'),
+        'USER': os.getenv('DB_USER', 'davidfinney'),
+        'PASSWORD': os.getenv('DB_PASSWORD', ''),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', 'visaguard_db'),
-            'USER': os.getenv('DB_USER', 'davidfinney'),
-            'PASSWORD': os.getenv('DB_PASSWORD', ''),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
-        }
-    }
+}
 
 # Cache Configuration - Use database cache for persistence across workers
 CACHES = {

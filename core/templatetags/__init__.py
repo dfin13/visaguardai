@@ -1,2 +1,0 @@
-# Templatetags package
-

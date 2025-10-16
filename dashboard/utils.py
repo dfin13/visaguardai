@@ -275,7 +275,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         }
         cache.set(f'facebook_profile_{user_id}', results['facebook_profile'], 3600)
     
-    # Cache all results
+    # Cache all results (temporary fast access)
     if 'instagram' in results:
         cache.set(f'instagram_analysis_{user_id}', results.get('instagram', []), 3600)
     if 'twitter' in results:
@@ -284,6 +284,63 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         cache.set(f'linkedin_analysis_{user_id}', results.get('linkedin', []), 3600)
     if 'facebook' in results:
         cache.set(f'facebook_analysis_{user_id}', results.get('facebook', []), 3600)
+    
+    # Persist results to database for permanent storage
+    try:
+        from .models import AnalysisResult
+        from django.contrib.auth.models import User
+        
+        user = User.objects.get(id=user_id)
+        
+        # Save each platform's results to the database
+        for platform in ['instagram', 'twitter', 'linkedin', 'facebook']:
+            if platform in results and results[platform]:
+                platform_data = results[platform]
+                profile_data = results.get(f'{platform}_profile', {})
+                
+                # Skip if it's an error string
+                if isinstance(platform_data, str):
+                    continue
+                
+                # Calculate overall risk score for this platform
+                risk_scores = []
+                if isinstance(platform_data, list):
+                    for post in platform_data:
+                        if isinstance(post, dict):
+                            # Try different data structures
+                            if 'analysis' in post and platform.title() in post['analysis']:
+                                score = post['analysis'][platform.title()].get('risk_score')
+                            elif platform.title() in post:
+                                score = post[platform.title()].get('risk_score')
+                            else:
+                                score = post.get('risk_score')
+                            
+                            if score is not None and isinstance(score, (int, float)) and score >= 0:
+                                risk_scores.append(score)
+                
+                avg_risk = sum(risk_scores) / len(risk_scores) if risk_scores else None
+                
+                # Create or update AnalysisResult
+                AnalysisResult.objects.update_or_create(
+                    user=user,
+                    platform=platform,
+                    analyzed_at__date=timezone.now().date(),  # One result per platform per day
+                    defaults={
+                        'posts_data': platform_data if isinstance(platform_data, list) else [],
+                        'analysis_data': {'results': platform_data},
+                        'profile_data': profile_data,
+                        'payment_completed': False,
+                        'post_count': len(platform_data) if isinstance(platform_data, list) else 0,
+                        'overall_risk_score': int(avg_risk) if avg_risk is not None else None,
+                    }
+                )
+        
+        print(f"✅ Analysis results persisted to database for user {user_id}")
+    except Exception as e:
+        print(f"⚠️  Failed to persist results to database (non-critical): {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't fail the analysis if DB persistence fails
     
     # Set completion stage
     cache.set(f'analysis_stage_{user_id}', 'complete', timeout=60*60)

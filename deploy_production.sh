@@ -17,7 +17,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Configuration
-SERVER="root@148.230.110.112"
+SERVER="root@165.227.115.79"
 PROJECT_DIR="/var/www/visaguardai"
 BRANCH="main"
 
@@ -146,5 +146,7 @@ echo "  2. Test site: https://visaguardai.com"
 echo "  3. Run test script: python3 test_production_platforms.py"
 echo ""
 echo -e "${GREEN}✅ Production is now live with optimized scrapers!${NC}"
+
+
 
 

@@ -172,7 +172,7 @@ def check_analysis_progress(request):
         user_profile = request.user.userprofile
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
+        twitter_username = user_profile.twitter  # Now stored in database
         facebook_username = user_profile.facebook
 
         instagram_result = cache.get(f'instagram_analysis_{request.user.id}')
@@ -306,7 +306,7 @@ def start_analysis(request):
         user_profile = UserProfile.objects.get(user=request.user)
         instagram_username = user_profile.instagram
         linkedin_username = user_profile.linkedin
-        twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
+        twitter_username = user_profile.twitter  # Now stored in database
         facebook_username = user_profile.facebook
         
         # Only start analysis if at least one username is present
@@ -390,9 +390,12 @@ def dashboard(request):
     
     twitter_analysis = request.session.get('twitter_analysis')
     twitter_loading = False
-    twitter_username = request.session.get('twitter_username')  # Twitter uses session storage
+    
+    # Get user profile for Twitter username
+    twitter_username = None
     try:
         user_profile = UserProfile.objects.get(user=request.user)
+        twitter_username = user_profile.twitter  # Now stored in database
     except Exception as e:
         pass
 
@@ -468,7 +471,7 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': user_profile.linkedin
         }
         # Use per-analysis payment status (pay-per-analysis model)
@@ -500,7 +503,7 @@ def dashboard(request):
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': None
         }
         current_analysis_paid = False
@@ -522,14 +525,14 @@ def dashboard(request):
         social_accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': user_profile.linkedin
         }
     else:
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': None
         }
 
@@ -550,7 +553,7 @@ def dashboard(request):
         social_accounts = {
             'instagram': None,
             'facebook': None,
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': None
         }
 
@@ -791,7 +794,7 @@ def debug_endpoints(request):
         debug_info['social_accounts'] = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook, 
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': user_profile.linkedin
         }
     except:
@@ -815,14 +818,11 @@ def disconnect_social_account(request):
         if platform not in ['instagram', 'facebook', 'twitter', 'linkedin']:
             return JsonResponse({'success': False, 'error': 'Invalid platform'})
         
-        # Twitter uses session storage (no database field)
-        if platform == 'twitter':
-            request.session.pop('twitter_username', None)
-            return JsonResponse({'success': True})
-        
-        # Other platforms use database storage
+        # All platforms now use database storage
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, None)
+        # Also update the {platform}_connected flag
+        setattr(user_profile, f'{platform}_connected', False)
         user_profile.save()
         return JsonResponse({'success': True})
     except UserProfile.DoesNotExist:
@@ -838,7 +838,7 @@ def get_social_accounts(request):
         accounts = {
             'instagram': user_profile.instagram,
             'facebook': user_profile.facebook,
-            'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+            'twitter': user_profile.twitter,  # Now stored in database
             'linkedin': user_profile.linkedin
         }
         return JsonResponse({
@@ -875,16 +875,15 @@ def connect_social_account(request):
         if not username:
             return JsonResponse({'success': False, 'message': 'Username is required'})
         
-        # Twitter uses session storage (no database field)
-        if platform == 'twitter':
-            request.session['twitter_username'] = username
-            return JsonResponse({'success': True, 'message': 'X (Twitter) account connected successfully!'})
-        
-        # Other platforms use database storage
+        # All platforms now use database storage
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, username)
+        # Also update the {platform}_connected flag
+        setattr(user_profile, f'{platform}_connected', True)
         user_profile.save()
-        return JsonResponse({'success': True, 'message': f'{platform.title()} account connected successfully!'})
+        
+        platform_name = 'X (Twitter)' if platform == 'twitter' else platform.title()
+        return JsonResponse({'success': True, 'message': f'{platform_name} account connected successfully!'})
     except UserProfile.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Profile not found'})
     except Exception as e:
@@ -1169,7 +1168,7 @@ def change_password(request):
             social_accounts = {
                 'instagram': user_profile.instagram,
                 'facebook': user_profile.facebook,
-                'twitter': request.session.get('twitter_username'),  # Twitter uses session storage
+                'twitter': user_profile.twitter,  # Now stored in database
                 'linkedin': user_profile.linkedin,
             }
             full_name = f"{user.first_name} {user.last_name}".strip()
