@@ -232,10 +232,10 @@ def analyze_linkedin_profile(username, limit=3):
     
     if not posts:
         from .account_checker import create_inaccessible_account_response
-        return create_inaccessible_account_response("LinkedIn", username, "has no accessible content")
+        return create_inaccessible_account_response("LinkedIn", username, "has no accessible content")                                                                              
     
     analysis = analyze_posts_with_ai(posts)
-    return {"linkedin": analysis}
+    return analysis  # Return list directly, not nested in dict
 
 # # --- Run test ---
 # if __name__ == "__main__":

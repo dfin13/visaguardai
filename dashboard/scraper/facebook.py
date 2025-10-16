@@ -187,16 +187,16 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         results = analyze_posts_batch("Facebook", posts_data)
         print(f"✅ Facebook intelligent analysis complete: {len(results)} posts")
         
-        # Return in same format as LinkedIn/Instagram: {"facebook": [...]}
-        return {"facebook": results}
+        # Return list directly, not nested in dict
+        return results
         
     except Exception as e:
         import traceback
         print(f"❌ Facebook intelligent analysis failed: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         
-        # Return error in consistent format
-        return {"facebook": [{
+        # Return error in consistent format (as list)
+        return [{
             "post": "Facebook analysis error",
             "post_data": {"data_unavailable": True, "error": str(e)},
             "analysis": {
@@ -219,7 +219,7 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
                     "risk_score": -1
                 }
             }
-        }]}
+        }]
 
 
 # # Example usage:
