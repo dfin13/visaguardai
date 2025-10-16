@@ -636,6 +636,14 @@ def dashboard(request):
             
             preview_stats['total_posts'] = instagram_count + linkedin_count + twitter_count + facebook_count
             
+            # Debug logging for post counts
+            print(f"📊 Post counts per platform:")
+            print(f"   Instagram: {instagram_count}")
+            print(f"   LinkedIn: {linkedin_count}")
+            print(f"   Twitter: {twitter_count}")
+            print(f"   Facebook: {facebook_count}")
+            print(f"   TOTAL: {preview_stats['total_posts']}")
+            
             # Count platforms analyzed (all connected platforms that returned results)
             platforms_with_results = []
             if instagram_count > 0:
@@ -648,6 +656,7 @@ def dashboard(request):
                 platforms_with_results.append('Facebook')
             
             preview_stats['platforms_analyzed'] = len(platforms_with_results)
+            print(f"   Platforms with results: {platforms_with_results}")
             
             # Determine risk level based on highest risk score across all platforms
             max_risk_score = 0
