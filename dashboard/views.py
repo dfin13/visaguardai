@@ -689,13 +689,13 @@ def dashboard(request):
             except:
                 pass
             
-            # Set risk level and display info
-            if max_risk_score <= 9:
-                preview_stats['risk_level'] = 'none'  # Low risk - hide box
+            # Set risk level and display info (updated thresholds)
+            if max_risk_score < 4:
+                preview_stats['risk_level'] = 'none'  # All low risk - hide box
                 preview_stats['risk_icon'] = ''
                 preview_stats['risk_text'] = ''
                 preview_stats['risk_color'] = ''
-            elif max_risk_score <= 29:
+            elif max_risk_score <= 6:
                 preview_stats['risk_level'] = 'moderate'
                 preview_stats['risk_icon'] = 'fa-flag'
                 preview_stats['risk_text'] = 'Risk Detected'
