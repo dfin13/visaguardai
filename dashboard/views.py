@@ -333,7 +333,10 @@ def validate_accounts(request):
             platform = request_data.get('platform')
             username = request_data.get('username')
             
+            print(f"🔍 [VALIDATION REQUEST] Platform: {platform}, Username: {username}")
+            
             if not platform or not username:
+                print(f"❌ [VALIDATION] Missing platform or username")
                 return JsonResponse({
                     'success': False,
                     'error': 'Platform and username required for validation'
@@ -364,6 +367,8 @@ def validate_accounts(request):
             
             # Run validation
             is_valid, message = validators[platform](username)
+            
+            print(f"📊 [VALIDATION RESULT] Platform: {platform}, Valid: {is_valid}, Message: {message}")
             
             return JsonResponse({
                 'success': True,
