@@ -186,7 +186,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     if instagram_username and 'instagram' in results:
         # Extract full name from scraped Instagram data (first post)
         scraped_full_name = "User"
-        if results.get('instagram') and len(results['instagram']) > 0:
+        if isinstance(results.get('instagram'), list) and len(results['instagram']) > 0:
             first_post = results['instagram'][0]
             if isinstance(first_post, dict) and 'owner_full_name' in first_post:
                 scraped_full_name = first_post['owner_full_name'] or "User"
@@ -256,7 +256,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     if facebook_username and 'facebook' in results:
         # Extract full name from scraped Facebook data (first post)
         scraped_full_name = "User"
-        if results.get('facebook') and len(results['facebook']) > 0:
+        if isinstance(results.get('facebook'), list) and len(results['facebook']) > 0:
             first_post = results['facebook'][0]
             if isinstance(first_post, dict):
                 scraped_full_name = (
