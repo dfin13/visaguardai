@@ -276,14 +276,35 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         cache.set(f'facebook_profile_{user_id}', results['facebook_profile'], 3600)
     
     # Cache all results (temporary fast access)
+    print(f"📦 Caching results to cache:")
+    print(f"   Results keys: {list(results.keys())}")
+    
     if 'instagram' in results:
-        cache.set(f'instagram_analysis_{user_id}', results.get('instagram', []), 3600)
+        data = results.get('instagram', [])
+        print(f"   ✅ Caching Instagram: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'instagram_analysis_{user_id}', data, 3600)
+    
     if 'twitter' in results:
-        cache.set(f'twitter_analysis_{user_id}', results.get('twitter', []), 3600)
+        data = results.get('twitter', [])
+        print(f"   ✅ Caching Twitter: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'twitter_analysis_{user_id}', data, 3600)
+    
     if 'linkedin' in results:
-        cache.set(f'linkedin_analysis_{user_id}', results.get('linkedin', []), 3600)
+        data = results.get('linkedin', [])
+        print(f"   ✅ Caching LinkedIn: {len(data) if isinstance(data, list) else type(data).__name__} - Data: {data if not isinstance(data, list) else f'{len(data)} posts'}")
+        cache.set(f'linkedin_analysis_{user_id}', data, 3600)
+    
     if 'facebook' in results:
-        cache.set(f'facebook_analysis_{user_id}', results.get('facebook', []), 3600)
+        data = results.get('facebook', [])
+        print(f"   ✅ Caching Facebook: {len(data) if isinstance(data, list) else type(data).__name__} - Data: {data if not isinstance(data, list) else f'{len(data)} posts'}")
+        cache.set(f'facebook_analysis_{user_id}', data, 3600)
+    
+    # Verify cache was set
+    print(f"🔍 Verifying cache after save:")
+    print(f"   Instagram cache: {type(cache.get(f'instagram_analysis_{user_id}')).__name__}")
+    print(f"   Twitter cache: {type(cache.get(f'twitter_analysis_{user_id}')).__name__}")
+    print(f"   LinkedIn cache: {type(cache.get(f'linkedin_analysis_{user_id}')).__name__}")
+    print(f"   Facebook cache: {type(cache.get(f'facebook_analysis_{user_id}')).__name__}")
     
     # Persist results to database for permanent storage
     try:
