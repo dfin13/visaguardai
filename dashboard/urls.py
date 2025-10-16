@@ -24,6 +24,7 @@ urlpatterns = [
     path('payment/', views.payment_view, name='payment_view'),
     path('reset-payment-status/', views.reset_payment_status, name='reset_payment_status'),
 
+    path('validate-accounts/', views.validate_accounts, name='validate_accounts'),
     path('start-analysis/', views.start_analysis, name='start_analysis'),
     path('check-analysis-progress/', views.check_analysis_progress, name='check_analysis_progress'),
     path('debug-endpoints/', views.debug_endpoints, name='debug_endpoints'),

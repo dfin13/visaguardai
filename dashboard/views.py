@@ -307,6 +307,53 @@ def process_analysis_async(user_id, instagram_username, linkedin_username, twitt
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@login_required
+def validate_accounts(request):
+    """
+    Pre-scrape validation endpoint to check if accounts exist and are public.
+    Returns validation results for all connected accounts.
+    """
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        
+        instagram_username = user_profile.instagram
+        linkedin_username = user_profile.linkedin
+        twitter_username = user_profile.twitter
+        facebook_username = user_profile.facebook
+        
+        # Import validation function
+        from .validators import validate_all_accounts
+        
+        print(f"🔍 Validating accounts for user {request.user.username}")
+        print(f"   Instagram: {instagram_username or 'None'}")
+        print(f"   LinkedIn: {linkedin_username or 'None'}")
+        print(f"   Twitter: {twitter_username or 'None'}")
+        print(f"   Facebook: {facebook_username or 'None'}")
+        
+        # Run validation (lightweight 1-post test scrapes)
+        all_valid, results = validate_all_accounts(
+            instagram_username=instagram_username,
+            linkedin_username=linkedin_username,
+            twitter_username=twitter_username,
+            facebook_username=facebook_username
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'all_valid': all_valid,
+            'results': results
+        })
+        
+    except Exception as e:
+        print(f"❌ Validation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
 def start_analysis(request):
     print(f"\n{'='*80}")
     print(f"🚀 START_ANALYSIS REQUEST RECEIVED")
