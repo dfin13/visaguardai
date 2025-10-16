@@ -676,60 +676,83 @@ def dashboard(request):
             
             # Determine risk level based on highest risk score across all platforms
             max_risk_score = 0
+            all_risk_scores = []
             
+            # Instagram
             try:
                 for post in request.session.get('instagram_analysis', []):
-                    if isinstance(post, dict) and 'Instagram' in post:
-                        score = post['Instagram'].get('risk_score', 0)
-                        if score and score > max_risk_score:
-                            max_risk_score = score
-            except:
-                pass
+                    if isinstance(post, dict) and 'analysis' in post and 'Instagram' in post['analysis']:
+                        score = post['analysis']['Instagram'].get('risk_score', 0)
+                        if score is not None and score >= 0:
+                            all_risk_scores.append(score)
+                            if score > max_risk_score:
+                                max_risk_score = score
+            except Exception as e:
+                print(f"⚠️  Error reading Instagram risk scores: {e}")
             
+            # LinkedIn
             try:
                 for post in request.session.get('linkedin_analysis', []):
-                    if isinstance(post, dict) and 'linkedin' in post:
-                        score = post['linkedin'].get('risk_score', 0)
-                        if score and score > max_risk_score:
-                            max_risk_score = score
-            except:
-                pass
+                    if isinstance(post, dict) and 'analysis' in post and 'LinkedIn' in post['analysis']:
+                        score = post['analysis']['LinkedIn'].get('risk_score', 0)
+                        if score is not None and score >= 0:
+                            all_risk_scores.append(score)
+                            if score > max_risk_score:
+                                max_risk_score = score
+            except Exception as e:
+                print(f"⚠️  Error reading LinkedIn risk scores: {e}")
             
+            # Twitter
             try:
                 if twitter_analysis and isinstance(twitter_analysis, list):
                     for post in twitter_analysis:
                         if isinstance(post, dict) and 'analysis' in post and 'Twitter' in post['analysis']:
                             score = post['analysis']['Twitter'].get('risk_score', 0)
-                            if score and score > max_risk_score:
-                                max_risk_score = score
-            except:
-                pass
+                            if score is not None and score >= 0:
+                                all_risk_scores.append(score)
+                                if score > max_risk_score:
+                                    max_risk_score = score
+            except Exception as e:
+                print(f"⚠️  Error reading Twitter risk scores: {e}")
             
+            # Facebook
             try:
                 for post in request.session.get('facebook_analysis', []):
-                    if isinstance(post, dict) and 'Facebook' in post:
-                        score = post['Facebook'].get('risk_score', 0)
-                        if score and score > max_risk_score:
-                            max_risk_score = score
-            except:
-                pass
+                    if isinstance(post, dict) and 'analysis' in post and 'Facebook' in post['analysis']:
+                        score = post['analysis']['Facebook'].get('risk_score', 0)
+                        if score is not None and score >= 0:
+                            all_risk_scores.append(score)
+                            if score > max_risk_score:
+                                max_risk_score = score
+            except Exception as e:
+                print(f"⚠️  Error reading Facebook risk scores: {e}")
             
-            # Set risk level and display info (updated thresholds)
-            if max_risk_score < 4:
-                preview_stats['risk_level'] = 'none'  # All low risk - hide box
-                preview_stats['risk_icon'] = ''
-                preview_stats['risk_text'] = ''
-                preview_stats['risk_color'] = ''
-            elif max_risk_score <= 6:
+            # Debug: Log risk scores found
+            print(f"🎯 Risk Score Analysis:")
+            print(f"   All scores found: {all_risk_scores}")
+            print(f"   Max risk score: {max_risk_score}")
+            print(f"   Avg risk score: {sum(all_risk_scores) / len(all_risk_scores) if all_risk_scores else 0:.1f}")
+            
+            # Set risk level and display info (based on max risk score)
+            # Thresholds: <4 = low (green), 4-6 = moderate (yellow), >=7 = high (red)
+            if max_risk_score >= 7:
+                preview_stats['risk_level'] = 'high'
+                preview_stats['risk_icon'] = 'fa-exclamation-triangle'
+                preview_stats['risk_text'] = 'High Risk Detected'
+                preview_stats['risk_color'] = 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+            elif max_risk_score >= 4:
                 preview_stats['risk_level'] = 'moderate'
                 preview_stats['risk_icon'] = 'fa-flag'
                 preview_stats['risk_text'] = 'Risk Detected'
                 preview_stats['risk_color'] = 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400'
             else:
-                preview_stats['risk_level'] = 'high'
-                preview_stats['risk_icon'] = 'fa-flag'
-                preview_stats['risk_text'] = 'High Risk Detected'
-                preview_stats['risk_color'] = 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+                # Low risk - show green badge
+                preview_stats['risk_level'] = 'low'
+                preview_stats['risk_icon'] = 'fa-check-circle'
+                preview_stats['risk_text'] = 'Low Risk'
+                preview_stats['risk_color'] = 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400'
+            
+            print(f"   Risk Classification: {preview_stats['risk_level'].upper()} ({preview_stats['risk_text']})")
     except Exception as e:
         print(f"⚠️  Preview stats calculation error (non-critical): {e}")
         # Use safe defaults on error
