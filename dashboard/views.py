@@ -597,9 +597,10 @@ def dashboard(request):
     preview_stats = {
         'total_posts': 0,
         'platforms_analyzed': 0,
-        'risk_flags': 0,
-        'overall_risk': 'Low Risk',
-        'overall_risk_class': 'text-green-600 dark:text-green-400'
+        'risk_level': 'none',  # 'none', 'moderate', 'high'
+        'risk_icon': '',
+        'risk_text': '',
+        'risk_color': ''
     }
     
     try:
@@ -635,26 +636,26 @@ def dashboard(request):
             
             preview_stats['total_posts'] = instagram_count + linkedin_count + twitter_count + facebook_count
             
-            # Count platforms analyzed
+            # Count platforms analyzed (all connected platforms that returned results)
+            platforms_with_results = []
             if instagram_count > 0:
-                preview_stats['platforms_analyzed'] += 1
+                platforms_with_results.append('Instagram')
             if linkedin_count > 0:
-                preview_stats['platforms_analyzed'] += 1
+                platforms_with_results.append('LinkedIn')
             if twitter_count > 0:
-                preview_stats['platforms_analyzed'] += 1
+                platforms_with_results.append('Twitter/X')
             if facebook_count > 0:
-                preview_stats['platforms_analyzed'] += 1
+                platforms_with_results.append('Facebook')
             
-            # Count risk flags (posts with risk score > 20)
-            risk_flags = 0
+            preview_stats['platforms_analyzed'] = len(platforms_with_results)
+            
+            # Determine risk level based on highest risk score across all platforms
             max_risk_score = 0
             
             try:
                 for post in request.session.get('instagram_analysis', []):
                     if isinstance(post, dict) and 'Instagram' in post:
                         score = post['Instagram'].get('risk_score', 0)
-                        if score and score > 20:
-                            risk_flags += 1
                         if score and score > max_risk_score:
                             max_risk_score = score
             except:
@@ -664,8 +665,6 @@ def dashboard(request):
                 for post in request.session.get('linkedin_analysis', []):
                     if isinstance(post, dict) and 'linkedin' in post:
                         score = post['linkedin'].get('risk_score', 0)
-                        if score and score > 20:
-                            risk_flags += 1
                         if score and score > max_risk_score:
                             max_risk_score = score
             except:
@@ -676,8 +675,6 @@ def dashboard(request):
                     for post in twitter_analysis:
                         if isinstance(post, dict) and 'analysis' in post and 'Twitter' in post['analysis']:
                             score = post['analysis']['Twitter'].get('risk_score', 0)
-                            if score and score > 20:
-                                risk_flags += 1
                             if score and score > max_risk_score:
                                 max_risk_score = score
             except:
@@ -687,25 +684,27 @@ def dashboard(request):
                 for post in request.session.get('facebook_analysis', []):
                     if isinstance(post, dict) and 'Facebook' in post:
                         score = post['Facebook'].get('risk_score', 0)
-                        if score and score > 20:
-                            risk_flags += 1
                         if score and score > max_risk_score:
                             max_risk_score = score
             except:
                 pass
             
-            preview_stats['risk_flags'] = risk_flags
-            
-            # Determine overall risk level
+            # Set risk level and display info
             if max_risk_score <= 9:
-                preview_stats['overall_risk'] = 'Low Risk'
-                preview_stats['overall_risk_class'] = 'text-green-600 dark:text-green-400'
+                preview_stats['risk_level'] = 'none'  # Low risk - hide box
+                preview_stats['risk_icon'] = ''
+                preview_stats['risk_text'] = ''
+                preview_stats['risk_color'] = ''
             elif max_risk_score <= 29:
-                preview_stats['overall_risk'] = 'Moderate Risk'
-                preview_stats['overall_risk_class'] = 'text-yellow-600 dark:text-yellow-400'
+                preview_stats['risk_level'] = 'moderate'
+                preview_stats['risk_icon'] = 'fa-flag'
+                preview_stats['risk_text'] = 'Risk Detected'
+                preview_stats['risk_color'] = 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400'
             else:
-                preview_stats['overall_risk'] = 'High Risk'
-                preview_stats['overall_risk_class'] = 'text-red-600 dark:text-red-400'
+                preview_stats['risk_level'] = 'high'
+                preview_stats['risk_icon'] = 'fa-flag'
+                preview_stats['risk_text'] = 'High Risk Detected'
+                preview_stats['risk_color'] = 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
     except Exception as e:
         print(f"⚠️  Preview stats calculation error (non-critical): {e}")
         # Use safe defaults on error
