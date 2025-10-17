@@ -3,9 +3,11 @@ Account validation functions for pre-scrape checks.
 Performs lightweight 1-post test scrapes to verify accounts exist and are public.
 """
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from apify_client import ApifyClient
 from django.conf import settings
+from django.core.cache import cache
 
 # Get API key
 APIFY_API_TOKEN = os.getenv('APIFY_API_KEY') or getattr(settings, 'APIFY_API_KEY', None)
@@ -17,14 +19,30 @@ if not APIFY_API_TOKEN:
 
 apify_client = ApifyClient(APIFY_API_TOKEN)
 
+# Validation cache settings (5 minutes)
+VALIDATION_CACHE_TIMEOUT = 300  # 5 minutes
+
+def get_validation_cache_key(platform, username):
+    """Generate cache key for validation results."""
+    return f"validation_{platform}_{username.lower()}"
+
 
 def validate_instagram_account(username):
     """
     Validate Instagram account exists and is public.
+    Uses caching for faster repeated validations.
     Returns: (bool, str) - (is_valid, message)
     """
+    # Check cache first
+    cache_key = get_validation_cache_key('instagram', username)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        print(f"⚡ Instagram validation from cache: @{username}")
+        return cached_result
+    
     try:
         print(f"🔍 Validating Instagram account: @{username}")
+        start_time = time.time()
         
         # Run minimal scrape (1 post only)
         run_input = {
@@ -34,7 +52,7 @@ def validate_instagram_account(username):
         
         run = apify_client.actor("apify/instagram-post-scraper").call(
             run_input=run_input,
-            timeout_secs=25  # Quick validation
+            timeout_secs=15  # Faster validation
         )
         
         # Get results
@@ -55,23 +73,40 @@ def validate_instagram_account(username):
         if not any(indicator in first_item for indicator in post_indicators):
             print(f"❌ Instagram validation failed for @{username}: No valid post data")
             print(f"   First item keys: {list(first_item.keys())}")
-            return False, f"Instagram account @{username} is private or doesn't exist."
+            result = (False, f"Instagram account @{username} is private or doesn't exist.")
+            cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+            return result
         
-        print(f"✅ Instagram account @{username} validated successfully")
-        return True, f"Successfully connected to Instagram (@{username})!"
+        elapsed = time.time() - start_time
+        print(f"✅ Instagram account @{username} validated successfully ({elapsed:.1f}s)")
+        result = (True, f"Successfully connected to Instagram (@{username})!")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
         
     except Exception as e:
-        print(f"❌ Instagram validation error for @{username}: {e}")
-        return False, f"Unable to access Instagram account @{username}. Please check the username."
+        elapsed = time.time() - start_time
+        print(f"❌ Instagram validation error for @{username}: {e} ({elapsed:.1f}s)")
+        result = (False, f"Unable to access Instagram account @{username}. Please check the username.")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
 
 
 def validate_linkedin_account(username):
     """
     Validate LinkedIn account exists and is public.
+    Uses caching for faster repeated validations.
     Returns: (bool, str) - (is_valid, message)
     """
+    # Check cache first
+    cache_key = get_validation_cache_key('linkedin', username)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        print(f"⚡ LinkedIn validation from cache: {username}")
+        return cached_result
+    
     try:
         print(f"🔍 Validating LinkedIn account: {username}")
+        start_time = time.time()
         
         # Run minimal scrape (1 post only)
         run_input = {
@@ -81,7 +116,7 @@ def validate_linkedin_account(username):
         
         run = apify_client.actor("apimaestro/linkedin-profile-posts").call(
             run_input=run_input,
-            timeout_secs=25
+            timeout_secs=15
         )
         
         # Get results
@@ -100,8 +135,11 @@ def validate_linkedin_account(username):
         
         # Check for actual post fields (indicates valid profile with posts)
         if 'text' in first_item or 'postText' in first_item or 'post_text' in first_item:
-            print(f"✅ LinkedIn account {username} validated successfully")
-            return True, f"Successfully connected to LinkedIn ({username})!"
+            elapsed = time.time() - start_time
+            print(f"✅ LinkedIn account {username} validated successfully ({elapsed:.1f}s)")
+            result = (True, f"Successfully connected to LinkedIn ({username})!")
+            cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+            return result
         
         # Check for profile-level fields (indicates profile exists even without posts)
         profile_indicators = ['profileUrl', 'profile_url', 'url', 'actorRunUrl']
@@ -110,25 +148,42 @@ def validate_linkedin_account(username):
             error_indicators = ['error', 'failed', 'not found', 'does not exist', 'unavailable']
             item_str = str(first_item).lower()
             if not any(error in item_str for error in error_indicators):
-                print(f"✅ LinkedIn account {username} validated (profile exists)")
-                return True, f"Successfully connected to LinkedIn ({username})!"
+                elapsed = time.time() - start_time
+                print(f"✅ LinkedIn account {username} validated (profile exists) ({elapsed:.1f}s)")
+                result = (True, f"Successfully connected to LinkedIn ({username})!")
+                cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+                return result
         
         print(f"❌ LinkedIn validation failed for {username}: No valid profile or post data found")
         print(f"   First item keys: {list(first_item.keys())}")
-        return False, f"LinkedIn profile '{username}' is private or doesn't exist."
+        result = (False, f"LinkedIn profile '{username}' is private or doesn't exist.")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
         
     except Exception as e:
-        print(f"❌ LinkedIn validation error for {username}: {e}")
-        return False, f"Unable to access LinkedIn profile '{username}'. Please check the username."
+        elapsed = time.time() - start_time
+        print(f"❌ LinkedIn validation error for {username}: {e} ({elapsed:.1f}s)")
+        result = (False, f"Unable to access LinkedIn profile '{username}'. Please check the username.")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
 
 
 def validate_twitter_account(username):
     """
     Validate Twitter/X account exists and is public.
+    Uses caching for faster repeated validations.
     Returns: (bool, str) - (is_valid, message)
     """
+    # Check cache first
+    cache_key = get_validation_cache_key('twitter', username)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        print(f"⚡ Twitter validation from cache: @{username}")
+        return cached_result
+    
     try:
         print(f"🔍 Validating Twitter account: @{username}")
+        start_time = time.time()
         
         # Run minimal scrape (1 tweet only)
         run_input = {
@@ -140,7 +195,7 @@ def validate_twitter_account(username):
         
         run = apify_client.actor("kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest").call(
             run_input=run_input,
-            timeout_secs=25
+            timeout_secs=15
         )
         
         # Get results
@@ -152,23 +207,40 @@ def validate_twitter_account(username):
         real_results = [r for r in results if not (isinstance(r, dict) and r.get('type') == 'mock_tweet')]
         
         if not real_results or len(real_results) == 0:
-            return False, f"Twitter account @{username} is private, suspended, or doesn't exist."
+            result = (False, f"Twitter account @{username} is private, suspended, or doesn't exist.")
+            cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+            return result
         
-        print(f"✅ Twitter account @{username} validated successfully")
-        return True, f"Successfully connected to Twitter/X (@{username})!"
+        elapsed = time.time() - start_time
+        print(f"✅ Twitter account @{username} validated successfully ({elapsed:.1f}s)")
+        result = (True, f"Successfully connected to Twitter/X (@{username})!")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
         
     except Exception as e:
-        print(f"❌ Twitter validation error for @{username}: {e}")
-        return False, f"Unable to access Twitter account @{username}. Please check the username."
+        elapsed = time.time() - start_time
+        print(f"❌ Twitter validation error for @{username}: {e} ({elapsed:.1f}s)")
+        result = (False, f"Unable to access Twitter account @{username}. Please check the username.")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
 
 
 def validate_facebook_account(username):
     """
     Validate Facebook account/page exists and is public.
+    Uses caching for faster repeated validations.
     Returns: (bool, str) - (is_valid, message)
     """
+    # Check cache first
+    cache_key = get_validation_cache_key('facebook', username)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        print(f"⚡ Facebook validation from cache: {username}")
+        return cached_result
+    
     try:
         print(f"🔍 Validating Facebook account: {username}")
+        start_time = time.time()
         
         # Run minimal scrape (1 post only)
         run_input = {
@@ -178,7 +250,7 @@ def validate_facebook_account(username):
         
         run = apify_client.actor("apify/facebook-posts-scraper").call(
             run_input=run_input,
-            timeout_secs=25
+            timeout_secs=15
         )
         
         # Get results
@@ -198,22 +270,32 @@ def validate_facebook_account(username):
         error_indicators = ['error', 'failed', 'not found', 'does not exist', 'unavailable', 'invalid']
         item_str = str(first_item).lower()
         if any(error in item_str for error in error_indicators):
-            return False, f"Facebook page '{username}' is not accessible."
+            result = (False, f"Facebook page '{username}' is not accessible.")
+            cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+            return result
         
         # Check for actual post fields (indicates valid page with posts)
         post_indicators = ['text', 'post_text', 'postText', 'caption', 'message', 'post_url']
         if any(indicator in first_item for indicator in post_indicators):
-            print(f"✅ Facebook account {username} validated successfully")
-            return True, f"Successfully connected to Facebook ({username})!"
+            elapsed = time.time() - start_time
+            print(f"✅ Facebook account {username} validated successfully ({elapsed:.1f}s)")
+            result = (True, f"Successfully connected to Facebook ({username})!")
+            cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+            return result
         
         # If no post fields found, it's likely invalid
         print(f"❌ Facebook validation failed for {username}: No valid post data found")
         print(f"   First item keys: {list(first_item.keys())}")
-        return False, f"Facebook page '{username}' is private or doesn't exist."
+        result = (False, f"Facebook page '{username}' is private or doesn't exist.")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
         
     except Exception as e:
-        print(f"❌ Facebook validation error for {username}: {e}")
-        return False, f"Unable to access Facebook page '{username}'. Please check the username."
+        elapsed = time.time() - start_time
+        print(f"❌ Facebook validation error for {username}: {e} ({elapsed:.1f}s)")
+        result = (False, f"Unable to access Facebook page '{username}'. Please check the username.")
+        cache.set(cache_key, result, VALIDATION_CACHE_TIMEOUT)
+        return result
 
 
 def validate_all_accounts(instagram_username=None, linkedin_username=None, 
