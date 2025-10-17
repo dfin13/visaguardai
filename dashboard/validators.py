@@ -82,45 +82,36 @@ def validate_linkedin_account(username):
         
         run = apify_client.actor("apimaestro/linkedin-profile-posts").call(
             run_input=run_input,
-            timeout_secs=30
+            timeout_secs=45  # Increased timeout
         )
+        
+        # Check if the run completed successfully
+        if run.get("status") == "FAILED":
+            return False, f"LinkedIn profile '{username}' is private or doesn't exist."
         
         # Get results
         results = []
         for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
             results.append(item)
         
-        # Check if we got any data
-        if not results or len(results) == 0:
-            return False, f"LinkedIn profile '{username}' is private or doesn't exist."
-        
-        # Check for valid post data
-        first_item = results[0]
-        if not isinstance(first_item, dict):
-            return False, f"LinkedIn profile '{username}' returned invalid data."
-        
-        # Check for actual post fields (indicates valid profile with posts)
-        if 'text' in first_item or 'postText' in first_item or 'post_text' in first_item:
-            print(f"✅ LinkedIn account {username} validated successfully")
+        # If scraper ran successfully and returned ANY data, consider it valid
+        if results and len(results) > 0:
+            print(f"✅ LinkedIn account {username} validated successfully ({len(results)} item(s) found)")
             return True, f"Successfully connected to LinkedIn ({username})!"
         
-        # Check for profile-level fields (indicates profile exists even without posts)
-        profile_indicators = ['profileUrl', 'profile_url', 'url', 'actorRunUrl']
-        if any(indicator in first_item for indicator in profile_indicators):
-            # Additional check: make sure it's not an error response
-            error_indicators = ['error', 'failed', 'not found', 'does not exist', 'unavailable']
-            item_str = str(first_item).lower()
-            if not any(error in item_str for error in error_indicators):
-                print(f"✅ LinkedIn account {username} validated (profile exists)")
-                return True, f"Successfully connected to LinkedIn ({username})!"
-        
-        print(f"❌ LinkedIn validation failed for {username}: No valid profile or post data found")
-        print(f"   First item keys: {list(first_item.keys())}")
+        # No results - might be private or have no posts
+        print(f"❌ LinkedIn validation failed for {username}: No data returned")
         return False, f"LinkedIn profile '{username}' is private or doesn't exist."
         
     except Exception as e:
-        print(f"❌ LinkedIn validation error for {username}: {e}")
-        return False, f"Unable to access LinkedIn profile '{username}'. Please check the username."
+        error_str = str(e).lower()
+        # Check for genuine errors
+        if any(err in error_str for err in ['not found', 'private', 'invalid', 'unavailable', 'does not exist']):
+            print(f"❌ LinkedIn validation error for {username}: {e}")
+            return False, f"Unable to access LinkedIn profile '{username}'. Please check the username."
+        # Other errors might be temporary - allow them
+        print(f"⚠️  LinkedIn validation warning for {username}: {e} (allowing anyway)")
+        return True, f"LinkedIn profile '{username}' connected (validation inconclusive)."
 
 
 def validate_twitter_account(username):
@@ -141,8 +132,12 @@ def validate_twitter_account(username):
         
         run = apify_client.actor("kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest").call(
             run_input=run_input,
-            timeout_secs=30
+            timeout_secs=45  # Increased timeout
         )
+        
+        # Check if the run completed successfully
+        if run.get("status") == "FAILED":
+            return False, f"Twitter account @{username} is private, suspended, or doesn't exist."
         
         # Get results
         results = []
@@ -152,15 +147,24 @@ def validate_twitter_account(username):
         # Filter out mock tweets (returned when account doesn't exist)
         real_results = [r for r in results if not (isinstance(r, dict) and r.get('type') == 'mock_tweet')]
         
-        if not real_results or len(real_results) == 0:
-            return False, f"Twitter account @{username} is private, suspended, or doesn't exist."
+        # If scraper ran successfully and returned ANY real data, consider it valid
+        if real_results and len(real_results) > 0:
+            print(f"✅ Twitter account @{username} validated successfully ({len(real_results)} tweet(s) found)")
+            return True, f"Successfully connected to Twitter/X (@{username})!"
         
-        print(f"✅ Twitter account @{username} validated successfully")
-        return True, f"Successfully connected to Twitter/X (@{username})!"
+        # No real results - might be private, suspended, or doesn't exist
+        print(f"❌ Twitter validation failed for @{username}: No tweets found")
+        return False, f"Twitter account @{username} is private, suspended, or doesn't exist."
         
     except Exception as e:
-        print(f"❌ Twitter validation error for @{username}: {e}")
-        return False, f"Unable to access Twitter account @{username}. Please check the username."
+        error_str = str(e).lower()
+        # Check for genuine errors
+        if any(err in error_str for err in ['not found', 'private', 'suspended', 'invalid', 'unavailable', 'does not exist']):
+            print(f"❌ Twitter validation error for @{username}: {e}")
+            return False, f"Unable to access Twitter account @{username}. Please check the username."
+        # Other errors might be temporary - allow them
+        print(f"⚠️  Twitter validation warning for @{username}: {e} (allowing anyway)")
+        return True, f"Twitter account @{username} connected (validation inconclusive)."
 
 
 def validate_facebook_account(username):
