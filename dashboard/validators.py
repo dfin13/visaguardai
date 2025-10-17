@@ -3,6 +3,7 @@ Account validation functions for pre-scrape checks.
 Performs lightweight 1-post test scrapes to verify accounts exist and are public.
 """
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from apify_client import ApifyClient
 from django.conf import settings
 
@@ -33,7 +34,7 @@ def validate_instagram_account(username):
         
         run = apify_client.actor("apify/instagram-post-scraper").call(
             run_input=run_input,
-            timeout_secs=30  # Quick validation
+            timeout_secs=25  # Quick validation
         )
         
         # Get results
@@ -80,7 +81,7 @@ def validate_linkedin_account(username):
         
         run = apify_client.actor("apimaestro/linkedin-profile-posts").call(
             run_input=run_input,
-            timeout_secs=30
+            timeout_secs=25
         )
         
         # Get results
@@ -139,7 +140,7 @@ def validate_twitter_account(username):
         
         run = apify_client.actor("kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest").call(
             run_input=run_input,
-            timeout_secs=30
+            timeout_secs=25
         )
         
         # Get results
@@ -177,7 +178,7 @@ def validate_facebook_account(username):
         
         run = apify_client.actor("apify/facebook-posts-scraper").call(
             run_input=run_input,
-            timeout_secs=30
+            timeout_secs=25
         )
         
         # Get results
@@ -219,6 +220,8 @@ def validate_all_accounts(instagram_username=None, linkedin_username=None,
                          twitter_username=None, facebook_username=None):
     """
     Validate all provided accounts before starting analysis.
+    Uses parallel execution for speed (all validations run simultaneously).
+    
     Returns: (bool, dict) - (all_valid, results)
     
     results format: {
@@ -231,30 +234,43 @@ def validate_all_accounts(instagram_username=None, linkedin_username=None,
     results = {}
     all_valid = True
     
-    # Validate each platform if username provided
+    # Build validation tasks
+    validation_tasks = []
     if instagram_username:
-        is_valid, message = validate_instagram_account(instagram_username)
-        results['instagram'] = {'valid': is_valid, 'message': message}
-        if not is_valid:
-            all_valid = False
-    
+        validation_tasks.append(('instagram', validate_instagram_account, instagram_username))
     if linkedin_username:
-        is_valid, message = validate_linkedin_account(linkedin_username)
-        results['linkedin'] = {'valid': is_valid, 'message': message}
-        if not is_valid:
-            all_valid = False
-    
+        validation_tasks.append(('linkedin', validate_linkedin_account, linkedin_username))
     if twitter_username:
-        is_valid, message = validate_twitter_account(twitter_username)
-        results['twitter'] = {'valid': is_valid, 'message': message}
-        if not is_valid:
-            all_valid = False
-    
+        validation_tasks.append(('twitter', validate_twitter_account, twitter_username))
     if facebook_username:
-        is_valid, message = validate_facebook_account(facebook_username)
-        results['facebook'] = {'valid': is_valid, 'message': message}
-        if not is_valid:
-            all_valid = False
+        validation_tasks.append(('facebook', validate_facebook_account, facebook_username))
+    
+    # Run all validations in parallel
+    if validation_tasks:
+        print(f"\n🚀 Starting parallel validation for {len(validation_tasks)} platform(s)...")
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all tasks
+            future_to_platform = {
+                executor.submit(validator_func, username): platform
+                for platform, validator_func, username in validation_tasks
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_platform):
+                platform = future_to_platform[future]
+                try:
+                    is_valid, message = future.result()
+                    results[platform] = {'valid': is_valid, 'message': message}
+                    if not is_valid:
+                        all_valid = False
+                    print(f"   ✓ {platform.capitalize()} validation completed: {'✅' if is_valid else '❌'}")
+                except Exception as e:
+                    print(f"   ❌ {platform.capitalize()} validation failed with exception: {e}")
+                    results[platform] = {'valid': False, 'message': f"Validation error: {str(e)}"}
+                    all_valid = False
+        
+        print(f"✅ All validations complete! Total: {len(validation_tasks)} platform(s)\n")
     
     return all_valid, results
 
