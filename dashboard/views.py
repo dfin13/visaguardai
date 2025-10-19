@@ -38,7 +38,19 @@ from django.contrib.auth.password_validation import validate_password, Validatio
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.utils import timezone
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.core.cache import cache
 import os
+import secrets
+import hashlib
+
+# Import for handling Google Allauth accounts
+try:
+    from allauth.socialaccount.models import SocialAccount
+    ALLAUTH_AVAILABLE = True
+except ImportError:
+    ALLAUTH_AVAILABLE = False
 
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -1556,6 +1568,53 @@ def reset_payment_status(request):
         return JsonResponse({'success': False, 'error': str(e)})
 
 
+def is_google_oauth_user(user):
+    """Check if user is a Google OAuth user without a Django password"""
+    if not ALLAUTH_AVAILABLE:
+        return False
+    
+    try:
+        # Check if user has social accounts (OAuth)
+        has_social_account = SocialAccount.objects.filter(user=user).exists()
+        
+        # Check if user has a usable password set
+        has_password = user.has_usable_password()
+        
+        # User is Google OAuth if they have social accounts but no Django password
+        return has_social_account and not has_password
+    except Exception as e:
+        print(f"Error checking OAuth user status: {e}")
+        return False
+
+def generate_otp():
+    """Generate a 6-digit one-time password"""
+    return secrets.randbelow(900000) + 100000
+
+def send_otp_email(user_email, otp):
+    """Send OTP to user's email"""
+    try:
+        subject = 'Verification Code for Data Deletion - VisaGuardAI'
+        email_message = f"""
+Hello,
+
+You've requested to delete your data from VisaGuardAI. To confirm this action, please use the verification code below:
+
+Verification Code: {otp}
+
+This code will expire in 10 minutes.
+
+If you did not request this action, please contact our support team immediately.
+
+Best regards,
+VisaGuardAI Team
+"""
+        
+        send_mail(subject, email_message, settings.DEFAULT_FROM_EMAIL, [user_email])
+        return True
+    except Exception as e:
+        print(f"Error sending OTP email: {e}")
+        return False
+
 @login_required
 def data_deletion_view(request):
     """View for data deletion confirmation page"""
@@ -1581,14 +1640,11 @@ def confirm_data_deletion(request):
         
         # Validate required fields
         password = data.get('password', '').strip()
+        otp = data.get('otp', '').strip()  # OTP for OAuth users
         delete_account = data.get('delete_account', False)  # True for full account, False for data only
         confirmation = data.get('confirmation', '').strip()
         
-        if not password:
-            return JsonResponse({
-                'success': False,
-                'error': 'Password is required'
-            })
+        user = request.user
         
         if confirmation.lower() not in ['yes', 'delete', 'confirm']:
             return JsonResponse({
@@ -1596,13 +1652,63 @@ def confirm_data_deletion(request):
                 'error': 'Please type "YES" to confirm deletion'
             })
         
-        # Verify password
-        user = authenticate(username=request.user.username, password=password)
-        if not user or user != request.user:
-            return JsonResponse({
-                'success': False,
-                'error': 'Incorrect password'
-            })
+        # Check if user is a Google OAuth user without password
+        if is_google_oauth_user(user):
+            # For OAuth users, use OTP verification instead of password
+            if not otp:
+                # Generate and send OTP if not provided
+                user_otp = generate_otp()
+                otp_key = f"deletion_otp_{user.id}"
+                
+                # Store OTP in cache for 10 minutes
+                cache.set(otp_key, user_otp, 600)  # 10 minutes
+                
+                # Send OTP to user's email
+                if send_otp_email(user.email, user_otp):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'OTP_REQUIRED',
+                        'message': f'A verification code has been sent to {user.email}. Please enter the 6-digit code to confirm the deletion.'
+                    })
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Failed to send verification code. Please try again or contact support.'
+                    })
+            else:
+                # Verify the provided OTP
+                otp_key = f"deletion_otp_{user.id}"
+                stored_otp = cache.get(otp_key)
+                
+                if not stored_otp:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Verification code has expired. Please request a new one.'
+                    })
+                
+                if str(otp) != str(stored_otp):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Invalid verification code. Please check and try again.'
+                    })
+                
+                # OTP is valid, remove it from cache
+                cache.delete(otp_key)
+        else:
+            # For regular users, use password verification
+            if not password:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Password is required'
+                })
+            
+            # Verify password
+            authenticated_user = authenticate(username=user.username, password=password)
+            if not authenticated_user or authenticated_user != user:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Incorrect password'
+                })
         
         # Perform deletion in a transaction for safety
         with transaction.atomic():
