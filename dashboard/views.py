@@ -1305,8 +1305,14 @@ def change_password(request):
         context = {}
 
         # Check current password
-        if not user.check_password(current_password):
+        if not current_password:
+            context['pw_change_error'] = 'Current password is required.'
+        elif not user.check_password(current_password):
             context['pw_change_error'] = 'Current password is incorrect.'
+        elif not new_password:
+            context['pw_change_error'] = 'New password is required.'
+        elif len(new_password) < 8:
+            context['pw_change_error'] = 'New password must be at least 8 characters long.'
         elif new_password != confirm_new_password:
             context['pw_change_error'] = 'New passwords do not match.'
         else:
@@ -1315,11 +1321,11 @@ def change_password(request):
                 user.set_password(new_password)
                 user.save()
                 update_session_auth_hash(request, user)  # Prevent logout after password change
-                context['pw_change_success'] = 'Password changed successfully.'
+                context['pw_change_success'] = 'Password changed successfully. You are still logged in.'
             except PasswordValidationError as e:
-                context['pw_change_error'] = ' '.join(e.messages)
+                context['pw_change_error'] = f'Password validation failed: {", ".join(e.messages)}'
             except Exception as e:
-                context['pw_change_error'] = 'Error updating password: {}'.format(str(e))
+                context['pw_change_error'] = f'Error updating password: {str(e)}'
 
         # Render settings page with feedback
         # Re-populate context as in setting_view

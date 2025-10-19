@@ -240,13 +240,11 @@ EMAIL_USE_TLS = True
 
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'visaguardai@gmail.com')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
 # For API expiry alert system
 ALERT_GMAIL_USER = EMAIL_HOST_USER
 ALERT_GMAIL_PASSWORD = EMAIL_HOST_PASSWORD
-
-# Email backend for development: prints emails to the console
-# DEFAULT_FROM_EMAIL = 'noreply@visaguardai.com'
 
 # At the end of urls.py
 
