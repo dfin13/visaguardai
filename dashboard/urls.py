@@ -28,4 +28,8 @@ urlpatterns = [
     path('start-analysis/', views.start_analysis, name='start_analysis'),
     path('check-analysis-progress/', views.check_analysis_progress, name='check_analysis_progress'),
     path('debug-endpoints/', views.debug_endpoints, name='debug_endpoints'),
+    
+    # Data deletion endpoints
+    path('data-deletion/', views.data_deletion_view, name='data_deletion'),
+    path('confirm-data-deletion/', views.confirm_data_deletion, name='confirm_data_deletion'),
 ]

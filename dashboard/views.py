@@ -19,7 +19,7 @@ def clear_analysis_session(request):
         if key in request.session:
             del request.session[key]
     return redirect(reverse('dashboard:dashboard'))
-from .models import AnalysisSession
+from .models import AnalysisSession, AnalysisResult
 from django.conf import settings
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -35,6 +35,10 @@ from .models import UserProfile
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password, ValidationError as PasswordValidationError
+from django.contrib.auth import authenticate
+from django.db import transaction
+from django.utils import timezone
+import os
 
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -1544,3 +1548,159 @@ def reset_payment_status(request):
         return JsonResponse({'success': False, 'error': 'Profile not found'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def data_deletion_view(request):
+    """View for data deletion confirmation page"""
+    return render(request, 'dashboard/data_deletion.html')
+
+
+@login_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def confirm_data_deletion(request):
+    """
+    Handle data deletion confirmation with password verification.
+    Includes option for full account deletion vs data-only deletion.
+    """
+    try:
+        if not request.body:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Invalid request data'
+            }, status=400)
+        
+        data = json.loads(request.body)
+        
+        # Validate required fields
+        password = data.get('password', '').strip()
+        delete_account = data.get('delete_account', False)  # True for full account, False for data only
+        confirmation = data.get('confirmation', '').strip()
+        
+        if not password:
+            return JsonResponse({
+                'success': False,
+                'error': 'Password is required'
+            })
+        
+        if confirmation.lower() not in ['yes', 'delete', 'confirm']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Please type "YES" to confirm deletion'
+            })
+        
+        # Verify password
+        user = authenticate(username=request.user.username, password=password)
+        if not user or user != request.user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Incorrect password'
+            })
+        
+        # Perform deletion in a transaction for safety
+        with transaction.atomic():
+            deleted_data = []
+            
+            if delete_account:
+                # Full account deletion - this will cascade delete related data
+                username = user.username
+                email = user.email
+                
+                # Delete user (this cascades to UserProfile, AnalysisSession, AnalysisResult)
+                user.delete()
+                
+                deleted_data.append(f"Full account deleted for {username} ({email})")
+                
+                # Log deletion for audit purposes
+                print(f"🔴 FULL ACCOUNT DELETION: {username} ({email}) at {timezone.now()}")
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Account and all data deleted successfully',
+                    'redirect_url': '/auth/login/',
+                    'full_deletion': True
+                })
+            
+            else:
+                # Data-only deletion - keep account but remove analysis data
+                username = user.username
+                
+                # Delete UserProfile data
+                try:
+                    user_profile = UserProfile.objects.get(user=user)
+                    
+                    # Clear social media usernames
+                    user_profile.instagram = None
+                    user_profile.linkedin = None
+                    user_profile.twitter = None
+                    user_profile.facebook = None
+                    user_profile.tiktok = None
+                    user_profile.instagram_connected = False
+                    user_profile.linkedin_connected = False
+                    user_profile.twitter_connected = False
+                    user_profile.facebook_connected = False
+                    user_profile.tiktok_connected = False
+                    
+                    # Clear optional data
+                    user_profile.country = None
+                    user_profile.university = None
+                    
+                    # Delete profile picture file
+                    if user_profile.profile_picture:
+                        try:
+                            if os.path.isfile(user_profile.profile_picture.path):
+                                os.remove(user_profile.profile_picture.path)
+                        except Exception as e:
+                            print(f"Could not delete profile picture: {e}")
+                        user_profile.profile_picture = None
+                    
+                    user_profile.save()
+                    deleted_data.append("User profile data cleared")
+                    
+                except UserProfile.DoesNotExist:
+                    pass
+                
+                # Delete AnalysisResults
+                analysis_results = AnalysisResult.objects.filter(user=user)
+                result_count = analysis_results.count()
+                analysis_results.delete()
+                if result_count > 0:
+                    deleted_data.append(f"{result_count} analysis result(s) deleted")
+                
+                # Delete AnalysisSessions
+                analysis_sessions = AnalysisSession.objects.filter(user=user)
+                session_count = analysis_sessions.count()
+                analysis_sessions.delete()
+                if session_count > 0:
+                    deleted_data.append(f"{session_count} analysis session(s) deleted")
+                
+                # Clear session data (if still active)
+                for key in list(request.session.keys()):
+                    if 'analysis' in key.lower() or 'social' in key.lower():
+                        del request.session[key]
+                
+                deleted_data.append("Session data cleared")
+                
+                # Log deletion for audit purposes
+                print(f"🟡 DATA DELETION: {username} at {timezone.now()}, removed: {', '.join(deleted_data)}")
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Your data has been deleted: {", ".join(deleted_data)}',
+                    'deleted_items': deleted_data,
+                    'full_deletion': False
+                })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON data'
+        }, status=400)
+    
+    except Exception as e:
+        print(f"Error during data deletion: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'An error occurred during deletion. Please try again or contact support.'
+        }, status=500)
