@@ -161,14 +161,16 @@ def forgot_password_view(request):
                     message_type = 'error'
                     
             elif user and account_type == 'allauth':
-                # Handle Google Allauth accounts - they can't reset password through Django
-                message = f'The account associated with {email} was created using Google Sign-In. To change your password, please use Google account settings or sign in with Google and contact support if needed.'
-                message_type = 'info'
+                # Handle Google Allauth accounts - redirect to create password page
+                import hashlib
+                token = hashlib.sha256(f"{email}{settings.SECRET_KEY}".encode()).hexdigest()[:16]
+                return redirect(f"{reverse('auth:create_password')}?email={email}&token={token}")
             else:
                 # Don't reveal that email doesn't exist for security
                 message = 'If an account with that email exists, a password reset link has been sent.'
                 message_type = 'info'
     
+    # Only render the template if we didn't redirect
     return render(request, 'auth/forgot_password.html', {'message': message, 'message_type': message_type})
 
 def reset_password_view(request, uidb64, token):
@@ -221,6 +223,90 @@ def reset_password_view(request, uidb64, token):
             'message': 'The reset link is invalid or has expired.',
             'message_type': 'error'
         })
+
+def create_password_view(request):
+    """Create a password for Google OAuth users"""
+    message = None
+    message_type = None
+    
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip().lower()
+        password = request.POST.get('password', '').strip()
+        confirm_password = request.POST.get('confirm_password', '').strip()
+        token = request.POST.get('token', '').strip()
+        
+        if not all([email, password, confirm_password, token]):
+            message = 'All fields are required.'
+            message_type = 'error'
+        elif password != confirm_password:
+            message = 'Passwords do not match.'
+            message_type = 'error'
+        elif len(password) < 8:
+            message = 'Password must be at least 8 characters long.'
+            message_type = 'error'
+        else:
+            try:
+                # Verify the user exists and has a Google account
+                user = User.objects.get(email__iexact=email)
+                
+                # Check if this is actually a Google OAuth user
+                if ALLAUTH_AVAILABLE:
+                    try:
+                        from allauth.socialaccount.models import SocialAccount
+                        if not SocialAccount.objects.filter(user=user).exists():
+                            message = 'Invalid request. This account is not eligible for password creation.'
+                            message_type = 'error'
+                        else:
+                            # Validate the token (we'll use a simple email-based token for now)
+                            import hashlib
+                            expected_token = hashlib.sha256(f"{email}{settings.SECRET_KEY}".encode()).hexdigest()[:16]
+                            if token != expected_token:
+                                message = 'Invalid token. Please try the forgot password process again.'
+                                message_type = 'error'
+                            else:
+                                # Set the password
+                                from django.contrib.auth.password_validation import validate_password
+                                validate_password(password, user)
+                                user.set_password(password)
+                                user.save()
+                                
+                                # Redirect to login with success message
+                                messages.success(request, 'Password created successfully! You can now log in with your email and password or continue using Google Sign-In.')
+                                return redirect('auth:login')
+                    except Exception as e:
+                        print(f"Error checking social account: {e}")
+                        message = 'Unable to verify account type. Please contact support.'
+                        message_type = 'error'
+                else:
+                    message = 'Invalid request. Please contact support.'
+                    message_type = 'error'
+            except User.DoesNotExist:
+                message = 'Account not found. Please contact support.'
+                message_type = 'error'
+            except Exception as e:
+                print(f"Password creation error: {e}")
+                if hasattr(e, 'messages'):
+                    message = f'Password validation failed: {", ".join(e.messages)}'
+                else:
+                    message = 'Unable to create password. Please try again or contact support.'
+                message_type = 'error'
+    
+    # For GET requests, get the email and token from query parameters or session
+    elif request.method == 'GET':
+        email = request.GET.get('email', '')
+        token = request.GET.get('token', '')
+    else:
+        email = ''
+        token = ''
+    
+    context = {
+        'email': email,
+        'token': token,
+        'message': message,
+        'message_type': message_type
+    }
+    
+    return render(request, 'auth/create_password.html', context)
 
 def profile_view(request):
     if not request.user.is_authenticated:
