@@ -107,8 +107,13 @@ def forgot_password_view(request):
                         email_addr = EmailAddress.objects.filter(email__iexact=email).first()
                         if email_addr:
                             user = email_addr.user
-                            account_type = 'allauth'
-                            print(f"Found Allauth user for {email}")
+                            # Only treat as allauth if they don't have a usable password
+                            if not user.has_usable_password():
+                                account_type = 'allauth'
+                                print(f"Found Allauth user without password for {email}")
+                            else:
+                                account_type = 'django'
+                                print(f"Found Allauth user with password for {email}")
                     except Exception as e:
                         print(f"Error checking Allauth: {e}")
                 
@@ -123,6 +128,11 @@ def forgot_password_view(request):
                             print(f"Found social account user without password for {email}")
                     except Exception as e:
                         print(f"Error checking social accounts: {e}")
+            
+            # Safety check: if user has usable password, always treat as django account
+            if user and user.has_usable_password():
+                account_type = 'django'
+                print(f"Overriding account_type to django for {email} - user has usable password")
             
             if user and account_type == 'django':
                 # Handle regular Django User accounts - allow password reset
