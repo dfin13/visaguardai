@@ -84,12 +84,15 @@ def forgot_password_view(request):
                 if ALLAUTH_AVAILABLE:
                     try:
                         from allauth.socialaccount.models import SocialAccount
-                        if SocialAccount.objects.filter(user=user).exists():
+                        has_social_account = SocialAccount.objects.filter(user=user).exists()
+                        has_usable_password = user.has_usable_password()
+                        
+                        if has_social_account and not has_usable_password:
                             account_type = 'allauth'
-                            print(f"Found Django user with social account for {email}")
+                            print(f"Found Django user with social account but no password for {email}")
                         else:
                             account_type = 'django'
-                            print(f"Found regular Django user for {email}")
+                            print(f"Found Django user for {email} (has_usable_password: {has_usable_password}, has_social: {has_social_account})")
                     except:
                         account_type = 'django'
                         print(f"Found Django user for {email}")
@@ -114,10 +117,10 @@ def forgot_password_view(request):
                     try:
                         from allauth.socialaccount.models import SocialAccount
                         social_user = SocialAccount.objects.filter(user__email__iexact=email).first()
-                        if social_user:
+                        if social_user and not social_user.user.has_usable_password():
                             user = social_user.user
                             account_type = 'allauth'
-                            print(f"Found social account user for {email}")
+                            print(f"Found social account user without password for {email}")
                     except Exception as e:
                         print(f"Error checking social accounts: {e}")
             
