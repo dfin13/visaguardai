@@ -153,25 +153,23 @@ def forgot_password_view(request):
                         'site_name': 'VisaGuardAI',
                     })
                     
-                    # Check if email service is properly configured before attempting to send
-                    if not settings.EMAIL_HOST_PASSWORD:
-                        print("No EMAIL_HOST_PASSWORD configured - skipping email send")
-                        message = 'Password reset is temporarily unavailable due to email service configuration. Please contact support for assistance.'
+                    # Attempt to send password reset email
+                    try:
+                        send_mail(subject, email_message, settings.DEFAULT_FROM_EMAIL, [email])
+                        message = f'A password reset link has been sent to {email}. Please check your email and follow the instructions.'
+                        message_type = 'success'
+                        print(f"Password reset email sent successfully to {email}")
+                    except Exception as e:
+                        print(f"Email sending error: {e}")
+                        # Provide more specific error messages based on the error type
+                        error_str = str(e).lower()
+                        if any(keyword in error_str for keyword in ['authentication', '530', '535', 'username and password not accepted']):
+                            message = 'Unable to send password reset email due to email service configuration. Please contact support for assistance.'
+                        elif any(keyword in error_str for keyword in ['timeout', 'connection refused', 'network']):
+                            message = 'There was a temporary network issue sending the password reset email. Please try again in a few minutes.'
+                        else:
+                            message = 'There was a temporary issue sending the password reset email. Please try again in a few minutes or contact support.'
                         message_type = 'error'
-                    else:
-                        try:
-                            send_mail(subject, email_message, settings.DEFAULT_FROM_EMAIL, [email])
-                            message = f'A password reset link has been sent to {email}. Please check your email and follow the instructions.'
-                            message_type = 'success'
-                            print(f"Password reset email sent successfully to {email}")
-                        except Exception as e:
-                            print(f"Email sending error: {e}")
-                            # Better error message for email issues
-                            if 'authentication' in str(e).lower() or '530' in str(e):
-                                message = 'Unable to send password reset email due to email service configuration. Please contact support for assistance.'
-                            else:
-                                message = 'There was a temporary issue sending the password reset email. Please try again in a few minutes or contact support.'
-                            message_type = 'error'
                 except Exception as e:
                     print(f"Password reset error: {e}")
                     message = 'Unable to generate password reset link. Please contact support.'
