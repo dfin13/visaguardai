@@ -134,6 +134,10 @@ def forgot_password_view(request):
                 account_type = 'django'
                 print(f"Overriding account_type to django for {email} - user has usable password")
             
+            # Debug output before decision
+            if user:
+                print(f"DEBUG: Final decision for {email} - user: {user.username}, account_type: {account_type}, has_usable_password: {user.has_usable_password()}")
+            
             if user and account_type == 'django':
                 # Handle regular Django User accounts - allow password reset
                 try:
@@ -175,6 +179,7 @@ def forgot_password_view(request):
                     
             elif user and account_type == 'allauth':
                 # Handle Google Allauth accounts - redirect to create password page
+                print(f"DEBUG: Redirecting to create password for {email}, account_type: {account_type}, has_usable_password: {user.has_usable_password()}")
                 import hashlib
                 token = hashlib.sha256(f"{email}{settings.SECRET_KEY}".encode()).hexdigest()[:16]
                 return redirect(f"{reverse('auth:create_password')}?email={email}&token={token}")
