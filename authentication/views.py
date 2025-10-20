@@ -161,9 +161,13 @@ def forgot_password_view(request):
                         print(f"Password reset email sent successfully to {email}")
                     except Exception as e:
                         print(f"Email sending error: {e}")
-                        # Provide more specific error messages based on the error type
+                        # Handle Gmail authentication errors specifically
                         error_str = str(e).lower()
-                        if any(keyword in error_str for keyword in ['authentication', '530', '535', 'username and password not accepted']):
+                        if '530' in error_str or 'authentication required' in error_str:
+                            # Gmail requires App Password for SMTP - provide helpful message
+                            message = 'Password reset email service is temporarily unavailable. Please contact support for assistance or try again later.'
+                            print(f"Gmail authentication failed for {email} - EMAIL_HOST_PASSWORD may need to be set to an App Password")
+                        elif any(keyword in error_str for keyword in ['535', 'username and password not accepted']):
                             message = 'Unable to send password reset email due to email service configuration. Please contact support for assistance.'
                         elif any(keyword in error_str for keyword in ['timeout', 'connection refused', 'network']):
                             message = 'There was a temporary network issue sending the password reset email. Please try again in a few minutes.'
