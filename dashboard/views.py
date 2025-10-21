@@ -407,7 +407,14 @@ def validate_accounts(request):
             facebook_username = user_profile.facebook
             
             # Import validation function
-            from .validators import validate_all_accounts
+            try:
+                from .validators import validate_all_accounts
+            except ImportError as import_err:
+                print(f"❌ Failed to import validators: {import_err}")
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Validation system unavailable'
+                }, status=500)
             
             print(f"🔍 Validating all accounts for user {request.user.username}")
             print(f"   Instagram: {instagram_username or 'None'}")
@@ -415,13 +422,22 @@ def validate_accounts(request):
             print(f"   Twitter: {twitter_username or 'None'}")
             print(f"   Facebook: {facebook_username or 'None'}")
             
-            # Run validation (lightweight 1-post test scrapes)
-            all_valid, results = validate_all_accounts(
-                instagram_username=instagram_username,
-                linkedin_username=linkedin_username,
-                twitter_username=twitter_username,
-                facebook_username=facebook_username
-            )
+            # Run validation (lightweight 1-post test scrapes) with timeout protection
+            try:
+                all_valid, results = validate_all_accounts(
+                    instagram_username=instagram_username,
+                    linkedin_username=linkedin_username,
+                    twitter_username=twitter_username,
+                    facebook_username=facebook_username
+                )
+            except Exception as validation_err:
+                print(f"❌ Validation execution error: {validation_err}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Account validation failed: {str(validation_err)}'
+                }, status=500)
             
             return JsonResponse({
                 'success': True,
@@ -429,13 +445,20 @@ def validate_accounts(request):
                 'results': results
             })
         
+    except UserProfile.DoesNotExist:
+        print(f"❌ [VALIDATION] UserProfile not found for user {request.user.username}")
+        return JsonResponse({
+            'success': False,
+            'error': 'User profile not found. Please update your settings first.'
+        }, status=400)
+    
     except Exception as e:
         print(f"❌ Validation error: {e}")
         import traceback
         traceback.print_exc()
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': f'Validation failed: {str(e)}'
         }, status=500)
 
 
@@ -478,6 +501,20 @@ def start_analysis(request):
         request.session.pop('linkedin_analysis', None)
         request.session.pop('twitter_analysis', None)
         request.session.pop('facebook_analysis', None)
+        
+        # Track which platforms are being analyzed in this session
+        platforms_analyzed = []
+        if instagram_username:
+            platforms_analyzed.append('instagram')
+        if linkedin_username:
+            platforms_analyzed.append('linkedin')
+        if twitter_username:
+            platforms_analyzed.append('twitter')
+        if facebook_username:
+            platforms_analyzed.append('facebook')
+        
+        request.session['platforms_analyzed'] = platforms_analyzed
+        print(f"📊 Platforms being analyzed: {platforms_analyzed}")
         
         # Set analysis state flags
         request.session['analysis_started'] = True
@@ -1078,8 +1115,17 @@ def result_view(request):
     from django.core.cache import cache
     user_id = request.user.id
 
+    # Get the platforms that were analyzed in this session
+    platforms_analyzed = request.session.get('platforms_analyzed', [])
+    print(f"📊 Platforms analyzed in current session: {platforms_analyzed}")
+
     # Helper to fetch from cache and set in session if missing
     def get_or_set_analysis(platform):
+        # Only return analysis data if this platform was analyzed in the current session
+        if platform not in platforms_analyzed:
+            print(f"⚠️ Platform {platform} was not analyzed in current session, returning empty")
+            return []
+            
         session_key = f'{platform}_analysis'
         analysis = request.session.get(session_key)
         if analysis is None:
@@ -1091,8 +1137,14 @@ def result_view(request):
     
     # Helper to fetch profile summaries from cache
     def get_profile_summary(platform):
+        # Only return profile data if this platform was analyzed in the current session
+        if platform not in platforms_analyzed:
+            print(f"🔍 [CACHE DEBUG] Platform {platform} not in platforms_analyzed: {platforms_analyzed}")
+            return {}
         cache_key = f'{platform}_profile_{user_id}'
-        return cache.get(cache_key)
+        cached_data = cache.get(cache_key)
+        print(f"🔍 [CACHE DEBUG] Retrieved {platform} profile from cache: {cached_data}")
+        return cached_data
 
     twitter_analysis = get_or_set_analysis('twitter')
     if twitter_analysis is None:
@@ -1114,8 +1166,13 @@ def result_view(request):
         print(f"📊 INSTAGRAM FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
         print(f"{'='*80}")
         if 'analysis' in first_item and 'Instagram' in first_item['analysis']:
-            analysis_preview = json.dumps(first_item['analysis']['Instagram'], indent=2)[:200]
-            print(f"{analysis_preview}...")
+            try:
+                analysis_preview = json.dumps(first_item['analysis']['Instagram'], indent=2)[:200]
+                print(f"{analysis_preview}...")
+            except (TypeError, ValueError) as e:
+                print(f"Error serializing Instagram analysis: {e}")
+                analysis_preview = str(first_item['analysis']['Instagram'])[:200]
+                print(f"{analysis_preview}...")
         print(f"{'='*80}\n")
 
     linkedin_analysis = get_or_set_analysis('linkedin')
@@ -1133,8 +1190,13 @@ def result_view(request):
             print(f"📊 LINKEDIN FIRST POST AI ANALYSIS PREVIEW (first 200 chars):")
             print(f"{'='*80}")
             if 'analysis' in first_item and 'LinkedIn' in first_item['analysis']:
-                analysis_preview = json.dumps(first_item['analysis']['LinkedIn'], indent=2)[:200]
-                print(f"{analysis_preview}...")
+                try:
+                    analysis_preview = json.dumps(first_item['analysis']['LinkedIn'], indent=2)[:200]
+                    print(f"{analysis_preview}...")
+                except (TypeError, ValueError) as e:
+                    print(f"Error serializing LinkedIn analysis: {e}")
+                    analysis_preview = str(first_item['analysis']['LinkedIn'])[:200]
+                    print(f"{analysis_preview}...")
             print(f"{'='*80}\n")
 
     facebook_analysis = get_or_set_analysis('facebook')
@@ -1168,44 +1230,6 @@ def result_view(request):
     if not isinstance(twitter_analysis, list):
         twitter_analysis = [twitter_analysis]
     
-    # Sort all platforms chronologically (most recent → oldest)
-    def sort_posts_chronologically(posts):
-        """Sort posts by created_at timestamp, most recent first."""
-        if not posts or not isinstance(posts, list):
-            return posts
-        
-        def get_timestamp(post):
-            """Extract timestamp from post, handling various field names and formats."""
-            if not isinstance(post, dict):
-                return 0
-            
-            # Try different timestamp field names
-            timestamp_str = (
-                post.get('created_at') or 
-                post.get('timestamp') or 
-                post.get('created_time') or 
-                post.get('date') or 
-                post.get('postedAt') or
-                ''
-            )
-            
-            if not timestamp_str:
-                return 0
-            
-            try:
-                from dateutil import parser
-                dt = parser.parse(timestamp_str)
-                return dt.timestamp()
-            except:
-                return 0
-        
-        return sorted(posts, key=get_timestamp, reverse=True)
-    
-    # Apply chronological sorting to all platforms
-    instagram_analysis = sort_posts_chronologically(instagram_analysis)
-    facebook_analysis = sort_posts_chronologically(facebook_analysis)
-    twitter_analysis = sort_posts_chronologically(twitter_analysis)
-    linkedin_analysis = sort_posts_chronologically(linkedin_analysis)
     
     # Calculate stats
     safe_count = 0
@@ -1226,25 +1250,200 @@ def result_view(request):
             continue
     
     # Fetch profile summaries
-    instagram_profile = get_profile_summary('instagram')
-    linkedin_profile = get_profile_summary('linkedin')
-    twitter_profile = get_profile_summary('twitter')
-    facebook_profile = get_profile_summary('facebook')
+    instagram_profile = get_profile_summary('instagram') or {}
+    linkedin_profile = get_profile_summary('linkedin') or {}
+    twitter_profile = get_profile_summary('twitter') or {}
+    facebook_profile = get_profile_summary('facebook') or {}
     
-    context = {
-        'twitter_analyses': twitter_analysis,
-        'safe_count': safe_count,
-        'caution_count': caution_count,
-        'warning_count': warning_count,
-        'instagram_analysis': instagram_analysis,
-        'instagram_profile': instagram_profile,
-        'linkedin_analysis': linkedin_analysis,
-        'linkedin_profile': linkedin_profile,
-        'facebook_analysis': facebook_analysis,
-        'facebook_profile': facebook_profile,
-        'twitter_profile': twitter_profile,
-      }
-    return render(request, 'dashboard/result.html', context) 
+    # DEBUG: Print what profile summaries we're getting
+    print(f"🔍 [PROFILE DEBUG] Instagram profile: {instagram_profile}")
+    print(f"🔍 [PROFILE DEBUG] LinkedIn profile: {linkedin_profile}")
+    print(f"🔍 [PROFILE DEBUG] Twitter profile: {twitter_profile}")
+    print(f"🔍 [PROFILE DEBUG] Facebook profile: {facebook_profile}")
+    
+    # Grade calculation functions
+    def risk_score_to_grade(risk_score):
+        """Convert risk score to letter grade"""
+        if risk_score is None:
+            return None, 0
+        elif risk_score <= 2:
+            return "A+", 12  # Highest numeric value for averaging
+        elif risk_score <= 7:
+            return "A", 11
+        elif risk_score <= 9:
+            return "A-", 10
+        elif risk_score <= 12:
+            return "B+", 9
+        elif risk_score <= 17:
+            return "B", 8
+        elif risk_score <= 19:
+            return "B-", 7
+        elif risk_score <= 22:
+            return "C+", 6
+        elif risk_score <= 27:
+            return "C", 5
+        elif risk_score <= 29:
+            return "C-", 4
+        elif risk_score <= 32:
+            return "D+", 3
+        elif risk_score <= 37:
+            return "D", 2
+        elif risk_score <= 39:
+            return "D-", 1
+        else:
+            return "F", 0
+
+    def numeric_grade_to_letter_grade(numeric_grade):
+        """Convert numeric grade (0-12) back to letter grade"""
+        grade_map = {
+            12: "A+", 11: "A", 10: "A-", 9: "B+", 8: "B", 7: "B-",
+            6: "C+", 5: "C", 4: "C-", 3: "D+", 2: "D", 1: "D-", 0: "F"
+        }
+        return grade_map.get(round(numeric_grade), "F")
+
+    def calculate_platform_grades():
+        """Calculate grades for each platform and overall average"""
+        platform_data = {}
+        all_numeric_grades = []
+        
+        # Process Twitter
+        if twitter_analysis and isinstance(twitter_analysis, list):
+            twitter_grades = []
+            for item in twitter_analysis:
+                if isinstance(item, dict) and 'analysis' in item and 'Twitter' in item['analysis']:
+                    risk_score = item['analysis']['Twitter'].get('risk_score')
+                    if risk_score is not None:
+                        grade, numeric = risk_score_to_grade(risk_score)
+                        if grade:
+                            twitter_grades.append(numeric)
+                            all_numeric_grades.append(numeric)
+            if twitter_grades:
+                platform_data['Twitter'] = {
+                    'average_numeric': sum(twitter_grades) / len(twitter_grades),
+                    'grade': numeric_grade_to_letter_grade(sum(twitter_grades) / len(twitter_grades)),
+                    'count': len(twitter_grades)
+                }
+        
+        # Process Instagram
+        if instagram_analysis and isinstance(instagram_analysis, list):
+            instagram_grades = []
+            for item in instagram_analysis:
+                if isinstance(item, dict) and 'analysis' in item and 'Instagram' in item['analysis']:
+                    risk_score = item['analysis']['Instagram'].get('risk_score')
+                    if risk_score is not None:
+                        grade, numeric = risk_score_to_grade(risk_score)
+                        if grade:
+                            instagram_grades.append(numeric)
+                            all_numeric_grades.append(numeric)
+            if instagram_grades:
+                platform_data['Instagram'] = {
+                    'average_numeric': sum(instagram_grades) / len(instagram_grades),
+                    'grade': numeric_grade_to_letter_grade(sum(instagram_grades) / len(instagram_grades)),
+                    'count': len(instagram_grades)
+                }
+        
+        # Process Facebook
+        if facebook_analysis and isinstance(facebook_analysis, list):
+            facebook_grades = []
+            for item in facebook_analysis:
+                if isinstance(item, dict) and 'analysis' in item and 'Facebook' in item['analysis']:
+                    risk_score = item['analysis']['Facebook'].get('risk_score')
+                    if risk_score is not None:
+                        grade, numeric = risk_score_to_grade(risk_score)
+                        if grade:
+                            facebook_grades.append(numeric)
+                            all_numeric_grades.append(numeric)
+            if facebook_grades:
+                platform_data['Facebook'] = {
+                    'average_numeric': sum(facebook_grades) / len(facebook_grades),
+                    'grade': numeric_grade_to_letter_grade(sum(facebook_grades) / len(facebook_grades)),
+                    'count': len(facebook_grades)
+                }
+        
+        # Process LinkedIn
+        if linkedin_analysis:
+            linkedin_grades = []
+            # LinkedIn might be in different format (dict with 'linkedin' key)
+            linkedin_posts = []
+            if isinstance(linkedin_analysis, dict) and 'linkedin' in linkedin_analysis:
+                linkedin_posts = linkedin_analysis['linkedin']
+            elif isinstance(linkedin_analysis, list):
+                linkedin_posts = linkedin_analysis
+                
+            for item in linkedin_posts:
+                if isinstance(item, dict) and 'analysis' in item and 'LinkedIn' in item['analysis']:
+                    risk_score = item['analysis']['LinkedIn'].get('risk_score')
+                    if risk_score is not None:
+                        grade, numeric = risk_score_to_grade(risk_score)
+                        if grade:
+                            linkedin_grades.append(numeric)
+                            all_numeric_grades.append(numeric)
+            if linkedin_grades:
+                platform_data['LinkedIn'] = {
+                    'average_numeric': sum(linkedin_grades) / len(linkedin_grades),
+                    'grade': numeric_grade_to_letter_grade(sum(linkedin_grades) / len(linkedin_grades)),
+                    'count': len(linkedin_grades)
+                }
+        
+        # Calculate overall average
+        overall_grade = "N/A"
+        if all_numeric_grades:
+            overall_average = sum(all_numeric_grades) / len(all_numeric_grades)
+            overall_grade = numeric_grade_to_letter_grade(overall_average)
+        
+        return platform_data, overall_grade, len(all_numeric_grades)
+
+    # Calculate platform and overall grades
+    try:
+        platform_grades, overall_grade, total_posts = calculate_platform_grades()
+    except Exception as e:
+        print(f"⚠️  Error in grade calculation: {e}")
+        import traceback
+        traceback.print_exc()
+        platform_grades = {}
+        overall_grade = "N/A"
+        total_posts = 0
+    
+    try:
+        context = {
+            'twitter_analyses': twitter_analysis,
+            'safe_count': safe_count,
+            'caution_count': caution_count,
+            'warning_count': warning_count,
+            'instagram_analysis': instagram_analysis,
+            'instagram_profile': instagram_profile,
+            'linkedin_analysis': linkedin_analysis,
+            'linkedin_profile': linkedin_profile,
+            'facebook_analysis': facebook_analysis,
+            'facebook_profile': facebook_profile,
+            'twitter_profile': twitter_profile,
+            'platform_grades': platform_grades,
+            'overall_grade': overall_grade,
+            'total_posts': total_posts,
+          }
+        return render(request, 'dashboard/result.html', context)
+    except Exception as e:
+        print(f"⚠️  Error building context or rendering template: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return minimal context to prevent complete failure
+        minimal_context = {
+            'twitter_analyses': [],
+            'safe_count': 0,
+            'caution_count': 0,
+            'warning_count': 0,
+            'instagram_analysis': [],
+            'instagram_profile': {},
+            'linkedin_analysis': [],
+            'linkedin_profile': {},
+            'facebook_analysis': [],
+            'facebook_profile': {},
+            'twitter_profile': {},
+            'platform_grades': {},
+            'overall_grade': "N/A",
+            'total_posts': 0,
+        }
+        return render(request, 'dashboard/result.html', minimal_context)
 
 # PDF export view for dashboard results
 @login_required
@@ -1323,8 +1522,8 @@ def change_password(request):
             context['pw_change_error'] = 'Current password is incorrect.'
         elif not new_password:
             context['pw_change_error'] = 'New password is required.'
-        elif len(new_password) < 8:
-            context['pw_change_error'] = 'New password must be at least 8 characters long.'
+        elif len(new_password) < 12:
+            context['pw_change_error'] = 'New password must be at least 12 characters long.'
         elif new_password != confirm_new_password:
             context['pw_change_error'] = 'New passwords do not match.'
         else:
@@ -1498,12 +1697,25 @@ def payment_view(request):
         return JsonResponse({'error': 'System configuration not found. Please contact administrator.'}, status=500)
     
     stripe.api_key = config.STRIPE_SECRET_KEY_LIVE if config.live else config.STRIPE_SECRET_KEY_TEST
+    
+    # Log live mode status
+    mode = "LIVE" if config.live else "TEST"
+    print(f"✅ [Stripe] Connected in {mode} mode to {stripe.api_key[:20]}...")
+    
     if request.method == 'POST':
         try:
+            import json
+            # Get promo code from request if provided
+            try:
+                data = json.loads(request.body)
+                promo_code = data.get('promo_code', '').strip()
+            except (json.JSONDecodeError, AttributeError):
+                promo_code = request.POST.get('promo_code', '').strip()
+            
             # Create Stripe checkout session
-            checkout_session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[{
+            session_params = {
+                'payment_method_types': ['card'],
+                'line_items': [{
                     'price_data': {
                         'currency': 'usd',
                         'product_data': {
@@ -1513,11 +1725,20 @@ def payment_view(request):
                     },
                     'quantity': 1,
                 }],
-                mode='payment',
-                success_url=request.build_absolute_uri('/dashboard/payment-success/'),
-                cancel_url=request.build_absolute_uri('/dashboard/payment-cancel/'),
-                customer_email=request.user.email,  # Pre-populate user's email
-            )
+                'mode': 'payment',
+                'success_url': request.build_absolute_uri('/dashboard/payment-success/'),
+                'cancel_url': request.build_absolute_uri('/dashboard/payment-cancel/'),
+                'customer_email': request.user.email,  # Pre-populate user's email
+                'allow_promotion_codes': True,  # Enable promo code input
+            }
+            
+            # Add promo code if provided
+            if promo_code:
+                session_params['discounts'] = [{
+                    'coupon': promo_code
+                }]
+            
+            checkout_session = stripe.checkout.Session.create(**session_params)
             return JsonResponse({'id': checkout_session.id})
         except Exception as e:
             return JsonResponse({'error': str(e)})
