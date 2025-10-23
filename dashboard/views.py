@@ -629,7 +629,9 @@ def dashboard(request):
                 user_profile = UserProfile.objects.get(user=request.user)
                 # Update existing profile
                 user_profile.username = username
-                user_profile.country = country
+                user_profile.country = country  # Keep for backward compatibility
+                user_profile.country_of_origin = country_origin
+                user_profile.country_of_application = country_application
                 user_profile.save()
                 messages.success(request, 'Profile updated successfully!')
             except UserProfile.DoesNotExist:
@@ -637,7 +639,9 @@ def dashboard(request):
                 user_profile = UserProfile.objects.create(
                     user=request.user,
                     username=username,
-                    country=country,
+                    country=country,  # Keep for backward compatibility
+                    country_of_origin=country_origin,
+                    country_of_application=country_application,
                 )
                 messages.success(request, 'Profile created successfully!')
                 
@@ -653,6 +657,8 @@ def dashboard(request):
         profile_data = {
             'username': user_profile.username,
             'country': user_profile.country,
+            'country_of_origin': user_profile.country_of_origin if hasattr(user_profile, 'country_of_origin') else '',
+            'country_of_application': user_profile.country_of_application if hasattr(user_profile, 'country_of_application') else '',
             'university': user_profile.university,  # Note: typo in model field name
             'profile_picture': user_profile.profile_picture if user_profile.profile_picture else None,
             'updated_at': user_profile.updated_at if user_profile.updated_at else None,
@@ -688,6 +694,8 @@ def dashboard(request):
         profile_data = {
             'username': '',
             'country': '',
+            'country_of_origin': '',
+            'country_of_application': '',
             'university': '',
         }
         social_accounts = {
@@ -1773,7 +1781,9 @@ def setting_view(request):
                 user_profile = UserProfile.objects.get(user=request.user)
                 # Update existing profile
                 user_profile.username = username
-                user_profile.country = country
+                user_profile.country = country  # Keep for backward compatibility
+                user_profile.country_of_origin = country_origin
+                user_profile.country_of_application = country_application
                 user_profile.university = university
                 
                 # Update social media accounts
@@ -1794,7 +1804,9 @@ def setting_view(request):
                 user_profile = UserProfile.objects.create(
                     user=request.user,
                     username=username,
-                    country=country,
+                    country=country,  # Keep for backward compatibility
+                    country_of_origin=country_origin,
+                    country_of_application=country_application,
                     university=university,
                     instagram=instagram_username if instagram_username else None,
                     facebook=facebook_username if facebook_username else None,

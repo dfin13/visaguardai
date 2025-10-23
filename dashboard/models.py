@@ -20,7 +20,9 @@ class UserProfile(models.Model):
     first_login = models.BooleanField(default=True)
     
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
-    country = models.CharField(max_length=100, blank=True, null=True,)
+    country = models.CharField(max_length=100, blank=True, null=True,)  # Legacy field, kept for backward compatibility
+    country_of_origin = models.CharField(max_length=100, blank=True, null=True)
+    country_of_application = models.CharField(max_length=100, blank=True, null=True)
     university = models.CharField(max_length=100, blank=True, null=True)
     payment_completed = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -91,6 +93,82 @@ class AnalysisResult(models.Model):
         super().save(*args, **kwargs)
 
 
+class Payment(models.Model):
+    """
+    Track all payment transactions for reliability and audit trail.
+    Prevents double charges and provides payment history.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+        ('canceled', 'Canceled'),
+        ('refunded', 'Refunded'),
+        ('expired', 'Expired'),  # Session timed out or became invalid
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payments')
+    stripe_session_id = models.CharField(max_length=255, unique=True, db_index=True, help_text="Stripe Checkout Session ID")
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, null=True, db_index=True, help_text="Stripe Payment Intent ID")
+    
+    amount = models.IntegerField(help_text="Amount in cents")
+    currency = models.CharField(max_length=3, default='usd')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    
+    # Metadata
+    customer_email = models.EmailField()
+    analysis_granted = models.BooleanField(default=False, help_text="Whether analysis access was granted")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Error tracking
+    error_message = models.TextField(blank=True, null=True)
+    retry_count = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['stripe_session_id']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - ${self.amount/100:.2f} - {self.status}"
+    
+    def mark_succeeded(self):
+        """Mark payment as succeeded and grant analysis access."""
+        if self.status != 'succeeded':
+            self.status = 'succeeded'
+            self.completed_at = timezone.now()
+            self.analysis_granted = True
+            self.save()
+            
+            # Update user profile
+            try:
+                profile = self.user.userprofile
+                profile.payment_completed = True
+                profile.save()
+            except Exception as e:
+                # Log but don't fail
+                print(f"Warning: Could not update user profile for payment {self.id}: {e}")
+    
+    def mark_failed(self, error_message=''):
+        """Mark payment as failed."""
+        self.status = 'failed'
+        self.error_message = error_message
+        self.save()
+    
+    def mark_canceled(self):
+        """Mark payment as canceled."""
+        self.status = 'canceled'
+        self.save()
+
+
 class Config(models.Model):
     """
     Global configuration with encrypted API keys.
@@ -110,6 +188,7 @@ class Config(models.Model):
     STRIPE_PUBLISHABLE_KEY_TEST = models.CharField(max_length=255)  # Public keys don't need encryption
     STRIPE_PUBLISHABLE_KEY_LIVE = models.CharField(max_length=255)  # Public keys don't need encryption
     live = models.BooleanField(default=False)
+    stripe_webhook_secret = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe webhook signing secret")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
