@@ -9,6 +9,10 @@ from django.template.loader import render_to_string
 from django.conf import settings
 from django.contrib import messages
 from django.urls import reverse
+from django.core.cache import cache
+import time
+import requests
+import json
 
 # Import for handling Google Allauth accounts
 try:
@@ -17,28 +21,124 @@ try:
 except ImportError:
     ALLAUTH_AVAILABLE = False
 
+def verify_recaptcha(recaptcha_response, request):
+    """
+    Verify Google reCAPTCHA v2 response.
+    Returns True if verification succeeds or if reCAPTCHA is not configured.
+    Returns False if verification fails.
+    Never raises exceptions - always returns True/False.
+    """
+    # If reCAPTCHA keys are not configured, gracefully pass (for dev/test)
+    if not settings.RECAPTCHA_PRIVATE_KEY or not settings.RECAPTCHA_PUBLIC_KEY:
+        print("WARNING: reCAPTCHA keys not configured - bypassing verification")
+        return True
+    
+    # If no response token provided, fail verification
+    if not recaptcha_response:
+        print("reCAPTCHA verification failed: No response token provided")
+        return False
+    
+    try:
+        # Verify with Google's reCAPTCHA API
+        verify_url = 'https://www.google.com/recaptcha/api/siteverify'
+        data = {
+            'secret': settings.RECAPTCHA_PRIVATE_KEY,
+            'response': recaptcha_response,
+            'remoteip': request.META.get('REMOTE_ADDR', '')
+        }
+        
+        response = requests.post(verify_url, data=data, timeout=5)
+        
+        # Check if we got a valid response
+        if response.status_code != 200:
+            print(f"reCAPTCHA API error: HTTP {response.status_code}")
+            return False
+        
+        result = response.json()
+        
+        # Log verification attempt for debugging
+        success = result.get('success', False)
+        if not success:
+            error_codes = result.get('error-codes', [])
+            print(f"reCAPTCHA verification failed: {error_codes}")
+        else:
+            print("reCAPTCHA verification successful")
+        
+        return success
+    
+    except requests.exceptions.Timeout:
+        print("reCAPTCHA verification error: Request timeout")
+        return False
+    
+    except requests.exceptions.RequestException as e:
+        print(f"reCAPTCHA verification error: Network error - {str(e)}")
+        return False
+    
+    except json.JSONDecodeError:
+        print("reCAPTCHA verification error: Invalid JSON response")
+        return False
+    
+    except Exception as e:
+        # Catch-all for any unexpected errors
+        print(f"reCAPTCHA verification error: Unexpected error - {str(e)}")
+        return False
+
 def login_view(request):
+    context = {
+        'RECAPTCHA_PUBLIC_KEY': settings.RECAPTCHA_PUBLIC_KEY
+    }
+    
     if request.user.is_authenticated:
         return redirect('dashboard:dashboard')
+    
     if request.method == 'POST':
-        username = request.POST.get('username')
+        # Verify reCAPTCHA first
+        recaptcha_response = request.POST.get('g-recaptcha-response')
+        if not verify_recaptcha(recaptcha_response, request):
+            messages.error(request, 'Please verify that you are human.')
+            return render(request, 'auth/login.html', context)
+        
+        username_or_email = request.POST.get('username')
         password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
+        
+        # Determine if input is email or username
+        if '@' in username_or_email:
+            # Input contains @, treat as email
+            try:
+                user_obj = User.objects.get(email=username_or_email)
+                user = authenticate(request, username=user_obj.username, password=password)
+            except User.DoesNotExist:
+                user = None
+        else:
+            # Input doesn't contain @, treat as username
+            user = authenticate(request, username=username_or_email, password=password)
 
         if user is not None:
             login(request, user)
             return redirect('dashboard:dashboard')
         else:
             messages.error(request, 'Invalid credentials')
-            return redirect('auth:login')
-    return render(request, 'auth/login.html')
+            return render(request, 'auth/login.html', context)
+    
+    return render(request, 'auth/login.html', context)
 
 def signup_view(request):
+    context = {
+        'RECAPTCHA_PUBLIC_KEY': settings.RECAPTCHA_PUBLIC_KEY
+    }
+    
     if request.method == 'POST':
         username = request.POST.get('username')
         email = request.POST.get('email')
         password = request.POST.get('password')
         confirm_password = request.POST.get('confirmPassword')
+        
+        # Verify reCAPTCHA
+        recaptcha_response = request.POST.get('g-recaptcha-response')
+        if not verify_recaptcha(recaptcha_response, request):
+            messages.error(request, 'Please verify that you are human.')
+            return render(request, 'auth/signup.html', context)
+        
         if password != confirm_password:
             messages.error(request, 'Passwords do not match')
         elif User.objects.filter(email=email).exists():
@@ -53,7 +153,8 @@ def signup_view(request):
             )
             login(request, user)
             return redirect('dashboard:dashboard')
-    return render(request, 'auth/signup.html')
+    
+    return render(request, 'auth/signup.html', context)
 
 def logout_view(request):
     logout(request)
@@ -67,128 +168,154 @@ def forgot_password_view(request):
         return redirect('dashboard:dashboard')
     
     if request.method == 'POST':
-        email = request.POST.get('email', '').strip().lower()
+        # Basic rate limiting: max 5 attempts per IP per hour
+        client_ip = request.META.get('REMOTE_ADDR', '')
+        rate_limit_key = f"forgot_password_rate_{client_ip}"
+        attempts = cache.get(rate_limit_key, 0)
         
-        if not email:
-            message = 'Please enter your email address.'
+        if attempts >= 5:
+            message = 'Too many password reset attempts. Please try again in an hour.'
             message_type = 'error'
         else:
-            user = None
-            account_type = None
+            email = request.POST.get('email', '').strip().lower()
             
-            # First, try to find a regular Django User account
-            try:
-                user = User.objects.get(email__iexact=email)
+            if not email:
+                message = 'Please enter your email address.'
+                message_type = 'error'
+            else:
+                # Increment rate limit counter
+                cache.set(rate_limit_key, attempts + 1, timeout=3600)  # 1 hour
                 
-                # Check if this Django user is actually an OAuth user
-                if ALLAUTH_AVAILABLE:
-                    try:
-                        from allauth.socialaccount.models import SocialAccount
-                        has_social_account = SocialAccount.objects.filter(user=user).exists()
-                        has_usable_password = user.has_usable_password()
-                        
-                        if has_social_account and not has_usable_password:
-                            account_type = 'allauth'
-                            print(f"Found Django user with social account but no password for {email}")
-                        else:
-                            account_type = 'django'
-                            print(f"Found Django user for {email} (has_usable_password: {has_usable_password}, has_social: {has_social_account})")
-                    except:
-                        account_type = 'django'
-                        print(f"Found Django user for {email}")
-                else:
-                    account_type = 'django'
-                    print(f"Found Django user for {email}")
-            except User.DoesNotExist:
-                # If no Django user, check if it's a Google Allauth account
-                if ALLAUTH_AVAILABLE:
-                    try:
-                        # Try both verified and unverified email addresses
-                        email_addr = EmailAddress.objects.filter(email__iexact=email).first()
-                        if email_addr:
-                            user = email_addr.user
-                            # Only treat as allauth if they don't have a usable password
-                            if not user.has_usable_password():
+                user = None
+                account_type = None
+                
+                # First, try to find a regular Django User account
+                try:
+                    user = User.objects.get(email__iexact=email)
+                    
+                    # Check if this Django user is actually an OAuth user
+                    if ALLAUTH_AVAILABLE:
+                        try:
+                            from allauth.socialaccount.models import SocialAccount
+                            has_social_account = SocialAccount.objects.filter(user=user).exists()
+                            has_usable_password = user.has_usable_password()
+                            
+                            if has_social_account and not has_usable_password:
                                 account_type = 'allauth'
-                                print(f"Found Allauth user without password for {email}")
+                                print(f"Found Django user with social account but no password for {email}")
                             else:
                                 account_type = 'django'
-                                print(f"Found Allauth user with password for {email}")
-                    except Exception as e:
-                        print(f"Error checking Allauth: {e}")
+                                print(f"Found Django user for {email} (has_usable_password: {has_usable_password}, has_social: {has_social_account})")
+                        except:
+                            account_type = 'django'
+                            print(f"Found Django user for {email}")
+                    else:
+                        account_type = 'django'
+                        print(f"Found Django user for {email}")
+                except User.DoesNotExist:
+                    # If no Django user, check if it's a Google Allauth account
+                    if ALLAUTH_AVAILABLE:
+                        try:
+                            # Try both verified and unverified email addresses
+                            email_addr = EmailAddress.objects.filter(email__iexact=email).first()
+                            if email_addr:
+                                user = email_addr.user
+                                # Only treat as allauth if they don't have a usable password
+                                if not user.has_usable_password():
+                                    account_type = 'allauth'
+                                    print(f"Found Allauth user without password for {email}")
+                                else:
+                                    account_type = 'django'
+                                    print(f"Found Allauth user with password for {email}")
+                        except Exception as e:
+                            print(f"Error checking Allauth: {e}")
+                    
+                    # Also check if user exists but has social accounts (another way to detect OAuth)
+                    if not user:
+                        try:
+                            from allauth.socialaccount.models import SocialAccount
+                            social_user = SocialAccount.objects.filter(user__email__iexact=email).first()
+                            if social_user and not social_user.user.has_usable_password():
+                                user = social_user.user
+                                account_type = 'allauth'
+                                print(f"Found social account user without password for {email}")
+                        except Exception as e:
+                            print(f"Error checking social accounts: {e}")
                 
-                # Also check if user exists but has social accounts (another way to detect OAuth)
-                if not user:
+                # Safety check: if user has usable password, always treat as django account
+                if user and user.has_usable_password():
+                    account_type = 'django'
+                    print(f"Overriding account_type to django for {email} - user has usable password")
+                
+                # Debug output before decision
+                if user:
+                    print(f"DEBUG: Final decision for {email} - user: {user.username}, account_type: {account_type}, has_usable_password: {user.has_usable_password()}")
+                
+                if user and account_type == 'django':
+                    # Handle regular Django User accounts - allow password reset
                     try:
-                        from allauth.socialaccount.models import SocialAccount
-                        social_user = SocialAccount.objects.filter(user__email__iexact=email).first()
-                        if social_user and not social_user.user.has_usable_password():
-                            user = social_user.user
-                            account_type = 'allauth'
-                            print(f"Found social account user without password for {email}")
+                        token = default_token_generator.make_token(user)
+                        uid = urlsafe_base64_encode(force_bytes(user.pk))
+                        reset_url = request.build_absolute_uri(
+                            reverse('auth:reset_password', kwargs={'uidb64': uid, 'token': token})
+                        )
+                        subject = 'Password Reset Request - VisaGuardAI'
+                        email_message = render_to_string('auth/password_reset_email.txt', {
+                            'user': user,
+                            'reset_url': reset_url,
+                            'site_name': 'VisaGuardAI',
+                        })
+                        
+                        # Attempt to send password reset email
+                        try:
+                            send_mail(subject, email_message, settings.DEFAULT_FROM_EMAIL, [email])
+                            message = f'A password reset link has been sent to {email}. Please check your email and follow the instructions.'
+                            message_type = 'success'
+                            print(f"Password reset email sent successfully to {email}")
+                        except Exception as e:
+                            print(f"Email sending error: {e}")
+                            # Handle Gmail authentication errors specifically
+                            error_str = str(e).lower()
+                            if '530' in error_str or 'authentication required' in error_str:
+                                # Gmail requires App Password for SMTP - provide helpful message
+                                message = 'Password reset email service is temporarily unavailable. Please contact support for assistance or try again later.'
+                                print(f"Gmail authentication failed for {email} - EMAIL_HOST_PASSWORD may need to be set to an App Password")
+                            elif any(keyword in error_str for keyword in ['535', 'username and password not accepted']):
+                                message = 'Unable to send password reset email due to email service configuration. Please contact support for assistance.'
+                            elif any(keyword in error_str for keyword in ['timeout', 'connection refused', 'network']):
+                                message = 'There was a temporary network issue sending the password reset email. Please try again in a few minutes.'
+                            else:
+                                message = 'There was a temporary issue sending the password reset email. Please try again in a few minutes or contact support.'
+                            message_type = 'error'
                     except Exception as e:
-                        print(f"Error checking social accounts: {e}")
-            
-            # Safety check: if user has usable password, always treat as django account
-            if user and user.has_usable_password():
-                account_type = 'django'
-                print(f"Overriding account_type to django for {email} - user has usable password")
-            
-            # Debug output before decision
-            if user:
-                print(f"DEBUG: Final decision for {email} - user: {user.username}, account_type: {account_type}, has_usable_password: {user.has_usable_password()}")
-            
-            if user and account_type == 'django':
-                # Handle regular Django User accounts - allow password reset
-                try:
-                    token = default_token_generator.make_token(user)
-                    uid = urlsafe_base64_encode(force_bytes(user.pk))
-                    reset_url = request.build_absolute_uri(
-                        reverse('auth:reset_password', kwargs={'uidb64': uid, 'token': token})
-                    )
-                    subject = 'Password Reset Request - VisaGuardAI'
-                    email_message = render_to_string('auth/password_reset_email.txt', {
-                        'user': user,
-                        'reset_url': reset_url,
-                        'site_name': 'VisaGuardAI',
-                    })
-                    
-                    # Attempt to send password reset email
-                    try:
-                        send_mail(subject, email_message, settings.DEFAULT_FROM_EMAIL, [email])
-                        message = f'A password reset link has been sent to {email}. Please check your email and follow the instructions.'
-                        message_type = 'success'
-                        print(f"Password reset email sent successfully to {email}")
-                    except Exception as e:
-                        print(f"Email sending error: {e}")
-                        # Handle Gmail authentication errors specifically
-                        error_str = str(e).lower()
-                        if '530' in error_str or 'authentication required' in error_str:
-                            # Gmail requires App Password for SMTP - provide helpful message
-                            message = 'Password reset email service is temporarily unavailable. Please contact support for assistance or try again later.'
-                            print(f"Gmail authentication failed for {email} - EMAIL_HOST_PASSWORD may need to be set to an App Password")
-                        elif any(keyword in error_str for keyword in ['535', 'username and password not accepted']):
-                            message = 'Unable to send password reset email due to email service configuration. Please contact support for assistance.'
-                        elif any(keyword in error_str for keyword in ['timeout', 'connection refused', 'network']):
-                            message = 'There was a temporary network issue sending the password reset email. Please try again in a few minutes.'
-                        else:
-                            message = 'There was a temporary issue sending the password reset email. Please try again in a few minutes or contact support.'
+                        print(f"Password reset error: {e}")
+                        message = 'Unable to generate password reset link. Please contact support.'
                         message_type = 'error'
-                except Exception as e:
-                    print(f"Password reset error: {e}")
-                    message = 'Unable to generate password reset link. Please contact support.'
-                    message_type = 'error'
                     
-            elif user and account_type == 'allauth':
-                # Handle Google Allauth accounts - redirect to create password page
-                print(f"DEBUG: Redirecting to create password for {email}, account_type: {account_type}, has_usable_password: {user.has_usable_password()}")
-                import hashlib
-                token = hashlib.sha256(f"{email}{settings.SECRET_KEY}".encode()).hexdigest()[:16]
-                return redirect(f"{reverse('auth:create_password')}?email={email}&token={token}")
-            else:
-                # Don't reveal that email doesn't exist for security
-                message = 'If an account with that email exists, a password reset link has been sent.'
-                message_type = 'info'
+                elif user and account_type == 'allauth':
+                    # Handle Google Allauth accounts - redirect to create password page
+                    print(f"DEBUG: Redirecting to create password for {email}, account_type: {account_type}, has_usable_password: {user.has_usable_password()}")
+                    import hashlib
+                    import secrets
+                    # Generate a more secure token with timestamp and random component
+                    timestamp = str(int(time.time()))
+                    random_part = secrets.token_urlsafe(16)
+                    token_data = f"{email}{settings.SECRET_KEY}{timestamp}{random_part}"
+                    token = hashlib.sha256(token_data.encode()).hexdigest()[:32]
+                    
+                    # Store token in cache with 1 hour expiration for verification
+                    cache_key = f"create_password_token_{email}"
+                    cache.set(cache_key, {
+                        'token': token,
+                        'user_id': user.id,
+                        'timestamp': timestamp
+                    }, timeout=3600)  # 1 hour expiration
+                    
+                    return redirect(f"{reverse('auth:create_password')}?email={email}&token={token}")
+                else:
+                    # Don't reveal that email doesn't exist for security
+                    message = 'If an account with that email exists, a password reset link has been sent.'
+                    message_type = 'info'
     
     # Only render the template if we didn't redirect
     return render(request, 'auth/forgot_password.html', {'message': message, 'message_type': message_type})
@@ -214,8 +341,8 @@ def reset_password_view(request, uidb64, token):
             if not password:
                 message = 'Please enter a password.'
                 message_type = 'error'
-            elif len(password) < 8:
-                message = 'Password must be at least 8 characters long.'
+            elif len(password) < 12:
+                message = 'Password must be at least 12 characters long.'
                 message_type = 'error'
             elif password != confirm:
                 message = 'Passwords do not match.'
@@ -261,8 +388,8 @@ def create_password_view(request):
         elif password != confirm_password:
             message = 'Passwords do not match.'
             message_type = 'error'
-        elif len(password) < 8:
-            message = 'Password must be at least 8 characters long.'
+        elif len(password) < 12:
+            message = 'Password must be at least 12 characters long.'
             message_type = 'error'
         else:
             try:
@@ -277,11 +404,12 @@ def create_password_view(request):
                             message = 'Invalid request. This account is not eligible for password creation.'
                             message_type = 'error'
                         else:
-                            # Validate the token (we'll use a simple email-based token for now)
-                            import hashlib
-                            expected_token = hashlib.sha256(f"{email}{settings.SECRET_KEY}".encode()).hexdigest()[:16]
-                            if token != expected_token:
-                                message = 'Invalid token. Please try the forgot password process again.'
+                            # Validate the token using cache-based verification
+                            cache_key = f"create_password_token_{email}"
+                            cached_data = cache.get(cache_key)
+                            
+                            if not cached_data or cached_data.get('token') != token:
+                                message = 'Invalid or expired token. Please try the forgot password process again.'
                                 message_type = 'error'
                             else:
                                 # Set the password
@@ -289,6 +417,9 @@ def create_password_view(request):
                                 validate_password(password, user)
                                 user.set_password(password)
                                 user.save()
+                                
+                                # Clear the token from cache after successful use
+                                cache.delete(cache_key)
                                 
                                 # Redirect to login with success message
                                 messages.success(request, 'Password created successfully! You can now log in with your email and password or continue using Google Sign-In.')
