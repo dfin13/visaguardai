@@ -588,6 +588,15 @@ def dashboard(request):
 
     if request.method == 'POST':
         try:
+            # DEBUG: Log all POST data
+            print(f"\n{'='*80}")
+            print(f"🔍 PROFILE SAVE DEBUG")
+            print(f"{'='*80}")
+            print(f"All POST keys: {list(request.POST.keys())}")
+            print(f"user-name: {request.POST.get('user-name', 'NOT FOUND')}")
+            print(f"user-country-application: {request.POST.get('user-country-application', 'NOT FOUND')}")
+            print(f"user-country-origin: {request.POST.get('user-country-origin', 'NOT FOUND')}")
+            print(f"{'='*80}\n")
 
             # Get form data
             username = request.POST.get('user-name', '').strip()
@@ -633,6 +642,14 @@ def dashboard(request):
                 user_profile.country_of_origin = country_origin
                 user_profile.country_of_application = country_application
                 user_profile.save()
+                
+                # DEBUG: Verify save
+                print(f"✅ Profile saved for user {request.user.username}")
+                print(f"   username: {user_profile.username}")
+                print(f"   country: {user_profile.country}")
+                print(f"   country_of_origin: {user_profile.country_of_origin}")
+                print(f"   country_of_application: {user_profile.country_of_application}")
+                
                 messages.success(request, 'Profile updated successfully!')
             except UserProfile.DoesNotExist:
                 # Create new profile and assign to user_profile
@@ -643,6 +660,14 @@ def dashboard(request):
                     country_of_origin=country_origin,
                     country_of_application=country_application,
                 )
+                
+                # DEBUG: Verify creation
+                print(f"✅ Profile created for user {request.user.username}")
+                print(f"   username: {user_profile.username}")
+                print(f"   country: {user_profile.country}")
+                print(f"   country_of_origin: {user_profile.country_of_origin}")
+                print(f"   country_of_application: {user_profile.country_of_application}")
+                
                 messages.success(request, 'Profile created successfully!')
                 
         except Exception as e:
@@ -663,6 +688,12 @@ def dashboard(request):
             'profile_picture': user_profile.profile_picture if user_profile.profile_picture else None,
             'updated_at': user_profile.updated_at if user_profile.updated_at else None,
         }
+        
+        # DEBUG: Log loaded profile data
+        print(f"\n📖 LOADING PROFILE DATA FOR USER: {request.user.username}")
+        print(f"   country_of_origin: '{user_profile.country_of_origin}'")
+        print(f"   country_of_application: '{user_profile.country_of_application}'")
+        print(f"   profile_data dict: {profile_data.get('country_of_origin')}, {profile_data.get('country_of_application')}\n")
         # Get social media accounts
         social_accounts = {
             'instagram': user_profile.instagram,
