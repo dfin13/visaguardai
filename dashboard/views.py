@@ -591,8 +591,8 @@ def dashboard(request):
 
             # Get form data
             username = request.POST.get('user-name', '').strip()
-            country = request.POST.get('user-country', '').strip()
-            university = request.POST.get('user-university', '').strip()
+            country_application = request.POST.get('user-country-application', '').strip()
+            country_origin = request.POST.get('user-country-origin', '').strip()
 
             # Create new analysis session (payment gating is now per-analysis)
             if username:
@@ -611,13 +611,18 @@ def dashboard(request):
                     'is_authenticated': request.user.is_authenticated,
                 })
             
-            if not country:
-                messages.error(request, 'Country is required.')
+            # At least one country field should be filled
+            if not country_application and not country_origin:
+                messages.error(request, 'At least one country field is required.')
                 return render(request, 'dashboard/dashboard.html', {
                     'user': request.user,
                     'user_email': request.user.email,
                     'is_authenticated': request.user.is_authenticated,
                 })
+            
+            # Store Country of Application in the country field (most relevant for visa purposes)
+            # If not provided, use Country of Origin as fallback
+            country = country_application if country_application else country_origin
             
             # Check if user profile already exists
             try:
@@ -625,7 +630,6 @@ def dashboard(request):
                 # Update existing profile
                 user_profile.username = username
                 user_profile.country = country
-                user_profile.university = university  # Note: typo in model field name
                 user_profile.save()
                 messages.success(request, 'Profile updated successfully!')
             except UserProfile.DoesNotExist:
@@ -634,7 +638,6 @@ def dashboard(request):
                     user=request.user,
                     username=username,
                     country=country,
-                    university=university,  # Note: typo in model field name
                 )
                 messages.success(request, 'Profile created successfully!')
                 
@@ -845,85 +848,139 @@ def dashboard(request):
             preview_stats['platforms_analyzed'] = len(platforms_with_results)
             print(f"   Platforms with results: {platforms_with_results}")
             
-            # Determine risk level based on highest risk score across all platforms
-            max_risk_score = 0
-            all_risk_scores = []
+            # Determine risk level based on overall average grade
+            # Helper function to convert risk score to numeric grade
+            def risk_score_to_numeric_grade(risk_score):
+                """Convert risk score to numeric grade (0-12)"""
+                if risk_score is None:
+                    return None
+                elif risk_score <= 2:
+                    return 12  # A+
+                elif risk_score <= 7:
+                    return 11  # A
+                elif risk_score <= 9:
+                    return 10  # A-
+                elif risk_score <= 12:
+                    return 9   # B+
+                elif risk_score <= 17:
+                    return 8   # B
+                elif risk_score <= 19:
+                    return 7   # B-
+                elif risk_score <= 22:
+                    return 6   # C+
+                elif risk_score <= 27:
+                    return 5   # C
+                elif risk_score <= 29:
+                    return 4   # C-
+                elif risk_score <= 32:
+                    return 3   # D+
+                elif risk_score <= 37:
+                    return 2   # D
+                elif risk_score <= 39:
+                    return 1   # D-
+                else:
+                    return 0   # F
+            
+            def numeric_to_letter_grade(numeric):
+                """Convert numeric grade to letter"""
+                grade_map = {
+                    12: "A+", 11: "A", 10: "A-", 9: "B+", 8: "B", 7: "B-",
+                    6: "C+", 5: "C", 4: "C-", 3: "D+", 2: "D", 1: "D-", 0: "F"
+                }
+                return grade_map.get(round(numeric), "F")
+            
+            # Collect all numeric grades from all platforms
+            all_numeric_grades = []
             
             # Instagram
             try:
                 for post in request.session.get('instagram_analysis', []):
                     if isinstance(post, dict) and 'analysis' in post and 'Instagram' in post['analysis']:
-                        score = post['analysis']['Instagram'].get('risk_score', 0)
+                        score = post['analysis']['Instagram'].get('risk_score')
                         if score is not None and score >= 0:
-                            all_risk_scores.append(score)
-                            if score > max_risk_score:
-                                max_risk_score = score
+                            numeric_grade = risk_score_to_numeric_grade(score)
+                            if numeric_grade is not None:
+                                all_numeric_grades.append(numeric_grade)
             except Exception as e:
-                print(f"⚠️  Error reading Instagram risk scores: {e}")
+                print(f"⚠️  Error reading Instagram grades: {e}")
             
             # LinkedIn
             try:
                 for post in request.session.get('linkedin_analysis', []):
                     if isinstance(post, dict) and 'analysis' in post and 'LinkedIn' in post['analysis']:
-                        score = post['analysis']['LinkedIn'].get('risk_score', 0)
+                        score = post['analysis']['LinkedIn'].get('risk_score')
                         if score is not None and score >= 0:
-                            all_risk_scores.append(score)
-                            if score > max_risk_score:
-                                max_risk_score = score
+                            numeric_grade = risk_score_to_numeric_grade(score)
+                            if numeric_grade is not None:
+                                all_numeric_grades.append(numeric_grade)
             except Exception as e:
-                print(f"⚠️  Error reading LinkedIn risk scores: {e}")
+                print(f"⚠️  Error reading LinkedIn grades: {e}")
             
             # Twitter
             try:
                 if twitter_analysis and isinstance(twitter_analysis, list):
                     for post in twitter_analysis:
                         if isinstance(post, dict) and 'analysis' in post and 'Twitter' in post['analysis']:
-                            score = post['analysis']['Twitter'].get('risk_score', 0)
+                            score = post['analysis']['Twitter'].get('risk_score')
                             if score is not None and score >= 0:
-                                all_risk_scores.append(score)
-                                if score > max_risk_score:
-                                    max_risk_score = score
+                                numeric_grade = risk_score_to_numeric_grade(score)
+                                if numeric_grade is not None:
+                                    all_numeric_grades.append(numeric_grade)
             except Exception as e:
-                print(f"⚠️  Error reading Twitter risk scores: {e}")
+                print(f"⚠️  Error reading Twitter grades: {e}")
             
             # Facebook
             try:
                 for post in request.session.get('facebook_analysis', []):
                     if isinstance(post, dict) and 'analysis' in post and 'Facebook' in post['analysis']:
-                        score = post['analysis']['Facebook'].get('risk_score', 0)
+                        score = post['analysis']['Facebook'].get('risk_score')
                         if score is not None and score >= 0:
-                            all_risk_scores.append(score)
-                            if score > max_risk_score:
-                                max_risk_score = score
+                            numeric_grade = risk_score_to_numeric_grade(score)
+                            if numeric_grade is not None:
+                                all_numeric_grades.append(numeric_grade)
             except Exception as e:
-                print(f"⚠️  Error reading Facebook risk scores: {e}")
+                print(f"⚠️  Error reading Facebook grades: {e}")
             
-            # Debug: Log risk scores found
-            print(f"🎯 Risk Score Analysis:")
-            print(f"   All scores found: {all_risk_scores}")
-            print(f"   Max risk score: {max_risk_score}")
-            print(f"   Avg risk score: {sum(all_risk_scores) / len(all_risk_scores) if all_risk_scores else 0:.1f}")
-            
-            # Set risk level and display info (based on max risk score)
-            # Thresholds: <4 = low (green), 4-6 = moderate (yellow), >=7 = high (red)
-            if max_risk_score >= 7:
-                preview_stats['risk_level'] = 'high'
-                preview_stats['risk_icon'] = 'fa-exclamation-triangle'
-                preview_stats['risk_text'] = 'High Risk Detected'
-                preview_stats['risk_color'] = 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
-            elif max_risk_score >= 4:
-                preview_stats['risk_level'] = 'moderate'
-                preview_stats['risk_icon'] = 'fa-flag'
-                preview_stats['risk_text'] = 'Risk Detected'
-                preview_stats['risk_color'] = 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400'
+            # Calculate overall average grade
+            overall_letter_grade = "N/A"
+            if all_numeric_grades:
+                overall_average = sum(all_numeric_grades) / len(all_numeric_grades)
+                overall_letter_grade = numeric_to_letter_grade(overall_average)
+                
+                print(f"🎯 Grade Analysis:")
+                print(f"   All numeric grades: {all_numeric_grades}")
+                print(f"   Average numeric grade: {overall_average:.2f}")
+                print(f"   Overall letter grade: {overall_letter_grade}")
+                
+                # Set risk level and display info based on overall grade
+                # A or A+ → Green ("Low Risk")
+                # A- to B → Yellow ("Moderate Risk Detected")
+                # B- or below → Red ("High Risk Detected")
+                if overall_letter_grade in ["A+", "A"]:
+                    preview_stats['risk_level'] = 'low'
+                    preview_stats['risk_icon'] = 'fa-check-circle'
+                    preview_stats['risk_text'] = 'Low Risk'
+                    preview_stats['risk_color'] = 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400'
+                elif overall_letter_grade in ["A-", "B+", "B"]:
+                    preview_stats['risk_level'] = 'moderate'
+                    preview_stats['risk_icon'] = 'fa-flag'
+                    preview_stats['risk_text'] = 'Moderate Risk Detected'
+                    preview_stats['risk_color'] = 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400'
+                else:
+                    # B- or below
+                    preview_stats['risk_level'] = 'high'
+                    preview_stats['risk_icon'] = 'fa-exclamation-triangle'
+                    preview_stats['risk_text'] = 'High Risk Detected'
+                    preview_stats['risk_color'] = 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+                
+                print(f"   Risk Classification: {preview_stats['risk_level'].upper()} ({preview_stats['risk_text']})")
             else:
-                # Low risk - show green badge
+                # No grades available - use neutral/safe default
                 preview_stats['risk_level'] = 'low'
                 preview_stats['risk_icon'] = 'fa-check-circle'
-                preview_stats['risk_text'] = 'Low Risk'
-                preview_stats['risk_color'] = 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400'
-            
-            print(f"   Risk Classification: {preview_stats['risk_level'].upper()} ({preview_stats['risk_text']})")
+                preview_stats['risk_text'] = 'Analysis Complete'
+                preview_stats['risk_color'] = 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400'
+                print(f"   No grades available - using neutral default")
     except Exception as e:
         print(f"⚠️  Preview stats calculation error (non-critical): {e}")
         # Use safe defaults on error
@@ -1113,7 +1170,20 @@ def result_view(request):
         return redirect(reverse('dashboard:dashboard'))
 
     from django.core.cache import cache
+    from dashboard.models import UserProfile
+    from dashboard.intelligent_analyzer import generate_profile_assessment
+    
     user_id = request.user.id
+
+    # Get user's social media usernames
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        instagram_username = user_profile.instagram
+        linkedin_username = user_profile.linkedin
+        twitter_username = user_profile.twitter
+        facebook_username = user_profile.facebook
+    except UserProfile.DoesNotExist:
+        instagram_username = linkedin_username = twitter_username = facebook_username = None
 
     # Get the platforms that were analyzed in this session
     platforms_analyzed = request.session.get('platforms_analyzed', [])
@@ -1137,14 +1207,46 @@ def result_view(request):
     
     # Helper to fetch profile summaries from cache
     def get_profile_summary(platform):
-        # Only return profile data if this platform was analyzed in the current session
-        if platform not in platforms_analyzed:
-            print(f"🔍 [CACHE DEBUG] Platform {platform} not in platforms_analyzed: {platforms_analyzed}")
-            return {}
         cache_key = f'{platform}_profile_{user_id}'
         cached_data = cache.get(cache_key)
         print(f"🔍 [CACHE DEBUG] Retrieved {platform} profile from cache: {cached_data}")
-        return cached_data
+        
+        # If cached data exists and has a proper full_name, return it
+        if cached_data and cached_data.get('full_name') and cached_data.get('full_name') != "User":
+            return cached_data
+        elif cached_data and cached_data.get('full_name') == "User":
+            print(f"🔍 [CACHE DEBUG] Found cached profile with 'User' full_name, will regenerate")
+            # Clear the invalid cached data so we can regenerate it
+            cache.delete(cache_key)
+            
+        # Try to create a fallback profile if we have a username (regardless of analysis status)
+        username_map = {
+            'instagram': instagram_username,
+            'linkedin': linkedin_username, 
+            'twitter': twitter_username,
+            'facebook': facebook_username
+        }
+        
+        username = username_map.get(platform)
+        if username and username.strip():
+            print(f"🔍 [FALLBACK DEBUG] Creating fallback profile for {platform} with username: {username}")
+            # Create a readable name from username
+            readable_name = username.replace('_', ' ').replace('-', ' ').title()
+            
+            fallback_profile = {
+                'username': username,
+                'full_name': readable_name,
+                'assessment': generate_profile_assessment(platform.title(), username)
+            }
+            
+            # Cache the fallback profile
+            cache.set(cache_key, fallback_profile, 3600)
+            print(f"🔍 [FALLBACK DEBUG] Cached fallback profile for {platform}: {fallback_profile}")
+            return fallback_profile
+        
+        # If no cached data and no username available, return empty dict
+        print(f"🔍 [CACHE DEBUG] Platform {platform} not in platforms_analyzed: {platforms_analyzed}")
+        return {}
 
     twitter_analysis = get_or_set_analysis('twitter')
     if twitter_analysis is None:
@@ -1214,24 +1316,24 @@ def result_view(request):
                 clean_data = clean_data.replace("json", "", 1).strip()  # remove 'json' right after ```
             else:
                 clean_data = twitter_analysis.strip()
-        
+
         if clean_data is None:
             twitter_analysis = []
         else:
             twitter_analysis = clean_data
-        try:
-            twitter_analysis = json.loads(twitter_analysis)
-            # If it's a dict with a 'Twitter' key, extract the list
-            if isinstance(twitter_analysis, dict) and 'Twitter' in twitter_analysis:
-                twitter_analysis = twitter_analysis['Twitter']
-        except json.JSONDecodeError:
-            twitter_analysis = []
+            try:
+                twitter_analysis = json.loads(twitter_analysis)
+                # If it's a dict with a 'Twitter' key, extract the list
+                if isinstance(twitter_analysis, dict) and 'Twitter' in twitter_analysis:
+                    twitter_analysis = twitter['Twitter']
+            except json.JSONDecodeError:
+                twitter_analysis = []
     
     if not isinstance(twitter_analysis, list):
         twitter_analysis = [twitter_analysis]
     
     
-    # Calculate stats
+# Calculate stats
     safe_count = 0
     caution_count = 0
     warning_count = 0
@@ -1249,11 +1351,40 @@ def result_view(request):
         except (KeyError, TypeError):
             continue
     
-    # Fetch profile summaries
-    instagram_profile = get_profile_summary('instagram') or {}
-    linkedin_profile = get_profile_summary('linkedin') or {}
-    twitter_profile = get_profile_summary('twitter') or {}
-    facebook_profile = get_profile_summary('facebook') or {}
+    # Fetch profile summaries - ensure we always get something for connected platforms
+    instagram_profile = get_profile_summary('instagram')
+    linkedin_profile = get_profile_summary('linkedin')
+    twitter_profile = get_profile_summary('twitter')
+    facebook_profile = get_profile_summary('facebook')
+    
+    # Ensure we have profile data for connected platforms even if analysis failed
+    if not instagram_profile and instagram_username:
+        instagram_profile = {
+            'username': instagram_username,
+            'full_name': instagram_username.replace('_', ' ').replace('-', ' ').title(),
+            'assessment': 'Profile connected but analysis not available'
+        }
+    
+    if not linkedin_profile and linkedin_username:
+        linkedin_profile = {
+            'username': linkedin_username,
+            'full_name': linkedin_username.replace('_', ' ').replace('-', ' ').title(),
+            'assessment': 'Profile connected but analysis not available'
+        }
+    
+    if not twitter_profile and twitter_username:
+        twitter_profile = {
+            'username': twitter_username,
+            'full_name': twitter_username.replace('_', ' ').replace('-', ' ').title(),
+            'assessment': 'Profile connected but analysis not available'
+        }
+    
+    if not facebook_profile and facebook_username:
+        facebook_profile = {
+            'username': facebook_username,
+            'full_name': facebook_username.replace('_', ' ').replace('-', ' ').title(),
+            'assessment': 'Profile connected but analysis not available'
+        }
     
     # DEBUG: Print what profile summaries we're getting
     print(f"🔍 [PROFILE DEBUG] Instagram profile: {instagram_profile}")
@@ -1420,7 +1551,7 @@ def result_view(request):
             'platform_grades': platform_grades,
             'overall_grade': overall_grade,
             'total_posts': total_posts,
-          }
+        }
         return render(request, 'dashboard/result.html', context)
     except Exception as e:
         print(f"⚠️  Error building context or rendering template: {e}")
@@ -1448,63 +1579,95 @@ def result_view(request):
 # PDF export view for dashboard results
 @login_required
 def export_pdf_view(request):
+    """
+    Generate professional PDF report using xhtml2pdf.
+    Handles missing data gracefully.
+    """
     from django.core.cache import cache
     from datetime import datetime
     
-    user_id = request.user.id
-    user_profile = request.user.userprofile
-    
-    def get_or_set_analysis(platform):
-        session_key = f'{platform}_analysis'
-        analysis = request.session.get(session_key)
-        if analysis is None:
-            cache_key = f'{platform}_analysis_{user_id}'
-            analysis = cache.get(cache_key)
-            if analysis is not None:
-                request.session[session_key] = analysis
-        return analysis
-    
-    twitter_analysis = get_or_set_analysis('twitter')
-    instagram_analysis = get_or_set_analysis('instagram')
-    linkedin_analysis = get_or_set_analysis('linkedin')
-    facebook_analysis = get_or_set_analysis('facebook')
-    
-    # Calculate overall risk score
-    total_risk = 0
-    platform_count = 0
-    
-    if instagram_analysis:
-        platform_count += 1
-    if linkedin_analysis:
-        platform_count += 1
-    if twitter_analysis:
-        platform_count += 1
-    if facebook_analysis:
-        platform_count += 1
-    
-    context = {
-        'user': request.user,
-        'report_date': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
-        'instagram_username': user_profile.instagram or 'Not connected',
-        'linkedin_username': user_profile.linkedin or 'Not connected',
-        # 'twitter_username': 'Not connected',  # twitter field removed from model
-        'facebook_username': user_profile.facebook or 'Not connected',
-        'twitter_analyses': twitter_analysis,
-        'instagram_analysis': instagram_analysis,
-        'linkedin_analysis': linkedin_analysis,
-        'facebook_analysis': facebook_analysis,
-        'platform_count': platform_count,
-    }
-    
-    html_string = render_to_string('dashboard/pdf_report.html', context)
-    response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="VisaGuardAI_Report_{request.user.username}_{datetime.now().strftime("%Y%m%d")}.pdf"'
-    pisa_status = pisa.CreatePDF(
-        html_string, dest=response
-    )
-    if pisa_status.err:
-        return HttpResponse('PDF generation failed', status=500)
-    return response
+    try:
+        user_id = request.user.id
+        
+        # Get user profile with fallback
+        try:
+            user_profile = request.user.userprofile
+            instagram_username = user_profile.instagram or 'Not connected'
+            linkedin_username = user_profile.linkedin or 'Not connected'
+            facebook_username = user_profile.facebook or 'Not connected'
+        except:
+            instagram_username = 'Not connected'
+            linkedin_username = 'Not connected'
+            facebook_username = 'Not connected'
+        
+        def get_or_set_analysis(platform):
+            """Get analysis from session or cache"""
+            try:
+                session_key = f'{platform}_analysis'
+                analysis = request.session.get(session_key)
+                if analysis is None:
+                    cache_key = f'{platform}_analysis_{user_id}'
+                    analysis = cache.get(cache_key)
+                    if analysis is not None:
+                        request.session[session_key] = analysis
+                return analysis
+            except:
+                # If session fails, try cache directly
+                cache_key = f'{platform}_analysis_{user_id}'
+                return cache.get(cache_key)
+        
+        twitter_analysis = get_or_set_analysis('twitter')
+        instagram_analysis = get_or_set_analysis('instagram')
+        linkedin_analysis = get_or_set_analysis('linkedin')
+        facebook_analysis = get_or_set_analysis('facebook')
+        
+        # Count platforms with data
+        platform_count = sum([
+            1 if instagram_analysis else 0,
+            1 if linkedin_analysis else 0,
+            1 if twitter_analysis else 0,
+            1 if facebook_analysis else 0
+        ])
+        
+        # If no analysis data, return error message
+        if platform_count == 0:
+            return HttpResponse('No analysis data found. Please run an analysis first.', status=404)
+        
+        context = {
+            'user': request.user,
+            'report_date': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+            'instagram_username': instagram_username,
+            'linkedin_username': linkedin_username,
+            'facebook_username': facebook_username,
+            'twitter_analyses': twitter_analysis or [],
+            'instagram_analysis': instagram_analysis or [],
+            'linkedin_analysis': linkedin_analysis or [],
+            'facebook_analysis': facebook_analysis or [],
+            'platform_count': platform_count,
+        }
+        
+        # Render template to HTML string
+        html_string = render_to_string('dashboard/pdf_report.html', context)
+        
+        # Create PDF response
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="VisaGuardAI_Report_{request.user.username}_{datetime.now().strftime("%Y%m%d")}.pdf"'
+        
+        # Generate PDF
+        pisa_status = pisa.CreatePDF(html_string, dest=response)
+        
+        if pisa_status.err:
+            print(f"❌ PDF generation error for user {request.user.username}")
+            return HttpResponse('PDF generation failed. Please try again or contact support.', status=500)
+        
+        print(f"✅ PDF generated successfully for user {request.user.username}")
+        return response
+        
+    except Exception as e:
+        print(f"❌ PDF export error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return HttpResponse(f'Error generating PDF: {str(e)}', status=500)
 
 @login_required
 def change_password(request):
@@ -1573,7 +1736,8 @@ def setting_view(request):
         try:
             # Get form data
             username = request.POST.get('username', '').strip()
-            country = request.POST.get('country', '').strip()
+            country_application = request.POST.get('country_application', '').strip()
+            country_origin = request.POST.get('country_origin', '').strip()
             university = request.POST.get('university', '').strip()
             full_name = request.POST.get('fullName', '').strip()
             
@@ -1595,9 +1759,14 @@ def setting_view(request):
                 messages.error(request, 'Username is required.')
                 return redirect('dashboard:setting')
             
-            if not country:
-                messages.error(request, 'Country is required.')
+            # At least one country field should be filled
+            if not country_application and not country_origin:
+                messages.error(request, 'At least one country field is required.')
                 return redirect('dashboard:setting')
+            
+            # Store Country of Application in the country field (most relevant for visa purposes)
+            # If not provided, use Country of Origin as fallback
+            country = country_application if country_application else country_origin
             
             # Get or create user profile
             try:
@@ -1692,56 +1861,155 @@ def setting_view(request):
     return render(request, 'dashboard/settings.html', context)
 @login_required
 def payment_view(request):
-    config = Config.objects.first()
-    if not config:
-        return JsonResponse({'error': 'System configuration not found. Please contact administrator.'}, status=500)
+    """
+    Create Stripe Checkout Session with proper error handling and payment tracking.
+    Prevents double charges by checking existing pending payments.
+    """
+    from dashboard.models import Payment
     
-    stripe.api_key = config.STRIPE_SECRET_KEY_LIVE if config.live else config.STRIPE_SECRET_KEY_TEST
-    
-    # Log live mode status
-    mode = "LIVE" if config.live else "TEST"
-    print(f"✅ [Stripe] Connected in {mode} mode to {stripe.api_key[:20]}...")
-    
-    if request.method == 'POST':
-        try:
-            import json
-            # Get promo code from request if provided
+    try:
+        config = Config.objects.first()
+        if not config:
+            return JsonResponse({'error': 'System configuration not found. Please contact administrator.'}, status=500)
+        
+        stripe.api_key = config.STRIPE_SECRET_KEY_LIVE if config.live else config.STRIPE_SECRET_KEY_TEST
+        
+        # Log live mode status
+        mode = "LIVE" if config.live else "TEST"
+        print(f"✅ [Stripe] Connected in {mode} mode to {stripe.api_key[:20]}...")
+        
+        if request.method == 'POST':
             try:
-                data = json.loads(request.body)
-                promo_code = data.get('promo_code', '').strip()
-            except (json.JSONDecodeError, AttributeError):
-                promo_code = request.POST.get('promo_code', '').strip()
-            
-            # Create Stripe checkout session
-            session_params = {
-                'payment_method_types': ['card'],
-                'line_items': [{
-                    'price_data': {
-                        'currency': 'usd',
-                        'product_data': {
-                            'name': 'Visa Application Analysis',
+                import json
+                
+                # Check for very recent pending payment (within last 5 minutes) to prevent accidental double-clicks
+                from django.utils import timezone
+                from datetime import timedelta
+                
+                five_minutes_ago = timezone.now() - timedelta(minutes=5)
+                existing_recent_payment = Payment.objects.filter(
+                    user=request.user,
+                    status__in=['pending', 'processing'],
+                    created_at__gte=five_minutes_ago  # Only check very recent payments
+                ).first()
+                
+                if existing_recent_payment:
+                    # Return existing session ID only if it's very recent (prevents double-clicks)
+                    print(f"ℹ️ [Payment] User {request.user.username} has recent {existing_recent_payment.status} payment (created {existing_recent_payment.created_at})")
+                    return JsonResponse({
+                        'id': existing_recent_payment.stripe_session_id,
+                        'message': 'Using existing recent payment session'
+                    })
+                
+                # If old pending payments exist (>5 min), mark them as expired and create new session
+                old_pending = Payment.objects.filter(
+                    user=request.user,
+                    status__in=['pending', 'processing'],
+                    created_at__lt=five_minutes_ago
+                )
+                if old_pending.exists():
+                    old_pending.update(status='expired')
+                    print(f"🕒 [Payment] Marked {old_pending.count()} old pending payments as expired")
+                
+                # Get promo code from request if provided
+                try:
+                    data = json.loads(request.body)
+                    promo_code = data.get('promo_code', '').strip()
+                except (json.JSONDecodeError, AttributeError):
+                    promo_code = request.POST.get('promo_code', '').strip()
+                
+                # Create Stripe checkout session
+                session_params = {
+                    'payment_method_types': ['card'],
+                    'line_items': [{
+                        'price_data': {
+                            'currency': 'usd',
+                            'product_data': {
+                                'name': 'Visa Application Analysis',
+                            },
+                            'unit_amount': config.Price,  # Amount in cents
                         },
-                        'unit_amount': config.Price,  # $15.00 in cents
-                    },
-                    'quantity': 1,
-                }],
-                'mode': 'payment',
-                'success_url': request.build_absolute_uri('/dashboard/payment-success/'),
-                'cancel_url': request.build_absolute_uri('/dashboard/payment-cancel/'),
-                'customer_email': request.user.email,  # Pre-populate user's email
-                'allow_promotion_codes': True,  # Enable promo code input
-            }
-            
-            # Add promo code if provided
-            if promo_code:
-                session_params['discounts'] = [{
-                    'coupon': promo_code
-                }]
-            
-            checkout_session = stripe.checkout.Session.create(**session_params)
-            return JsonResponse({'id': checkout_session.id})
-        except Exception as e:
-            return JsonResponse({'error': str(e)})
+                        'quantity': 1,
+                    }],
+                    'mode': 'payment',
+                    'success_url': request.build_absolute_uri('/dashboard/payment-success/') + '?session_id={CHECKOUT_SESSION_ID}',
+                    'cancel_url': request.build_absolute_uri('/dashboard/payment-cancel/'),
+                    'customer_email': request.user.email,  # Pre-populate user's email
+                    'allow_promotion_codes': True,  # Enable promo code input
+                    'metadata': {
+                        'user_id': request.user.id,
+                        'username': request.user.username,
+                    }
+                }
+                
+                # Add promo code if provided
+                if promo_code:
+                    try:
+                        session_params['discounts'] = [{
+                            'coupon': promo_code
+                        }]
+                    except Exception as promo_error:
+                        print(f"⚠️ [Payment] Promo code error: {promo_error}")
+                        # Continue without promo code rather than failing
+                
+                checkout_session = stripe.checkout.Session.create(**session_params)
+                
+                # Create Payment record to track this transaction
+                payment = Payment.objects.create(
+                    user=request.user,
+                    stripe_session_id=checkout_session.id,
+                    amount=config.Price,
+                    currency='usd',
+                    status='pending',
+                    customer_email=request.user.email
+                )
+                
+                print(f"✅ [Payment] Created payment record {payment.id} for session {checkout_session.id}")
+                
+                return JsonResponse({'id': checkout_session.id})
+                
+            except stripe.error.CardError as e:
+                # Card was declined
+                error_msg = e.user_message or str(e)
+                print(f"❌ [Payment] Card error: {error_msg}")
+                return JsonResponse({'error': f'Card error: {error_msg}'}, status=400)
+                
+            except stripe.error.RateLimitError as e:
+                # Too many requests to Stripe API
+                print(f"❌ [Payment] Rate limit error: {e}")
+                return JsonResponse({'error': 'Too many payment requests. Please try again in a moment.'}, status=429)
+                
+            except stripe.error.InvalidRequestError as e:
+                # Invalid parameters
+                print(f"❌ [Payment] Invalid request: {e}")
+                return JsonResponse({'error': 'Invalid payment request. Please contact support.'}, status=400)
+                
+            except stripe.error.AuthenticationError as e:
+                # Authentication with Stripe failed
+                print(f"❌ [Payment] Authentication error: {e}")
+                return JsonResponse({'error': 'Payment system configuration error. Please contact support.'}, status=500)
+                
+            except stripe.error.APIConnectionError as e:
+                # Network communication failed
+                print(f"❌ [Payment] API connection error: {e}")
+                return JsonResponse({'error': 'Could not connect to payment system. Please try again.'}, status=503)
+                
+            except stripe.error.StripeError as e:
+                # Generic Stripe error
+                print(f"❌ [Payment] Stripe error: {e}")
+                return JsonResponse({'error': 'Payment processing error. Please try again.'}, status=500)
+                
+            except Exception as e:
+                # Catch-all for unexpected errors
+                print(f"❌ [Payment] Unexpected error: {e}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': 'An unexpected error occurred. Please try again.'}, status=500)
+    
+    except Exception as e:
+        # Catch errors in config retrieval
+        print(f"❌ [Payment] Configuration error: {e}")
+        return JsonResponse({'error': 'System configuration error. Please contact support.'}, status=500)
 
     context = {
         'stripe_public_key': config.STRIPE_PUBLISHABLE_KEY_LIVE if config.live else config.STRIPE_PUBLISHABLE_KEY_TEST,
@@ -1759,18 +2027,267 @@ def payment_view(request):
 
 @login_required
 def payment_success(request):
-    profile = request.user.userprofile
-    profile.payment_completed = True
-    profile.save()
-    request.session['current_analysis_paid'] = True
-    messages.success(request, "Payment successful! Your full analysis is now available.")
-    return redirect(reverse('dashboard:result'))
+    """
+    Handle successful payment redirect from Stripe.
+    Grant access and redirect to results immediately - webhook will update in background.
+    """
+    from dashboard.models import Payment
+    
+    try:
+        session_id = request.GET.get('session_id')
+        
+        if session_id:
+            # Check if payment exists and is successful
+            try:
+                payment = Payment.objects.get(stripe_session_id=session_id, user=request.user)
+                
+                if payment.status == 'succeeded':
+                    # Payment already processed by webhook
+                    request.session['current_analysis_paid'] = True
+                    return redirect(reverse('dashboard:result'))
+                elif payment.status in ['pending', 'processing']:
+                    # Payment pending but user just paid - grant optimistic access
+                    # Webhook will confirm in background
+                    request.session['current_analysis_paid'] = True
+                    return redirect(reverse('dashboard:result'))
+                else:
+                    # Payment failed or canceled
+                    messages.error(request, f"Payment {payment.status}. Please try again.")
+                    return redirect(reverse('dashboard:dashboard'))
+                    
+            except Payment.DoesNotExist:
+                # Payment record not created yet - grant access anyway (Stripe redirect means payment initiated)
+                request.session['current_analysis_paid'] = True
+                return redirect(reverse('dashboard:result'))
+        else:
+            # No session ID - check user profile for payment status
+            try:
+                profile = request.user.userprofile
+                if profile.payment_completed:
+                    request.session['current_analysis_paid'] = True
+                    return redirect(reverse('dashboard:result'))
+            except:
+                pass
+            
+            # No session ID but came from payment - grant access
+            request.session['current_analysis_paid'] = True
+            return redirect(reverse('dashboard:result'))
+            
+    except Exception as e:
+        print(f"❌ [Payment Success] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        # Even on error, if user is on payment success page, grant access
+        request.session['current_analysis_paid'] = True
+        return redirect(reverse('dashboard:result'))
+
 
 @login_required
 def payment_cancel(request):
+    """Handle canceled payment."""
+    from dashboard.models import Payment
+    
+    try:
+        # Mark any pending payments as canceled
+        pending_payments = Payment.objects.filter(
+            user=request.user,
+            status__in=['pending', 'processing']
+        )
+        
+        for payment in pending_payments:
+            payment.mark_canceled()
+            print(f"ℹ️ [Payment] Canceled payment {payment.id}")
+        
+        messages.info(request, "Payment was canceled. You can try again when ready.")
+    except Exception as e:
+        print(f"⚠️ [Payment Cancel] Error: {e}")
+        messages.info(request, "Payment was canceled.")
+    
     return redirect(reverse('dashboard:dashboard'))
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def stripe_webhook(request):
+    """
+    Handle Stripe webhook events with signature verification.
+    Processes checkout.session.completed and payment_intent events.
+    """
+    from dashboard.models import Payment, Config
+    
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    
+    try:
+        config = Config.objects.first()
+        if not config or not config.stripe_webhook_secret:
+            print("❌ [Webhook] Webhook secret not configured")
+            return JsonResponse({'error': 'Webhook not configured'}, status=500)
+        
+        # Verify webhook signature
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, config.stripe_webhook_secret
+            )
+        except ValueError as e:
+            # Invalid payload
+            print(f"❌ [Webhook] Invalid payload: {e}")
+            return JsonResponse({'error': 'Invalid payload'}, status=400)
+        except stripe.error.SignatureVerificationError as e:
+            # Invalid signature
+            print(f"❌ [Webhook] Invalid signature: {e}")
+            return JsonResponse({'error': 'Invalid signature'}, status=400)
+        
+        # Handle the event
+        event_type = event['type']
+        
+        if event_type == 'checkout.session.completed':
+            session = event['data']['object']
+            handle_checkout_session_completed(session)
+            
+        elif event_type == 'checkout.session.async_payment_succeeded':
+            session = event['data']['object']
+            handle_checkout_session_completed(session)
+            
+        elif event_type == 'checkout.session.async_payment_failed':
+            session = event['data']['object']
+            handle_checkout_session_failed(session)
+            
+        elif event_type == 'payment_intent.succeeded':
+            payment_intent = event['data']['object']
+            handle_payment_intent_succeeded(payment_intent)
+            
+        elif event_type == 'payment_intent.payment_failed':
+            payment_intent = event['data']['object']
+            handle_payment_intent_failed(payment_intent)
+        
+        else:
+            print(f"ℹ️ [Webhook] Unhandled event type: {event_type}")
+        
+        return JsonResponse({'status': 'success'})
+        
+    except Exception as e:
+        print(f"❌ [Webhook] Error processing webhook: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def handle_checkout_session_completed(session):
+    """Process successful checkout session."""
+    from dashboard.models import Payment
+    from django.contrib.auth.models import User
+    
+    try:
+        session_id = session['id']
+        payment_status = session.get('payment_status')
+        
+        print(f"✅ [Webhook] Processing checkout.session.completed: {session_id}")
+        
+        # Find the payment record
+        try:
+            payment = Payment.objects.get(stripe_session_id=session_id)
+        except Payment.DoesNotExist:
+            # Payment record doesn't exist - create it from webhook data
+            user_id = session.get('metadata', {}).get('user_id')
+            if not user_id:
+                print(f"❌ [Webhook] No user_id in session metadata")
+                return
+            
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                print(f"❌ [Webhook] User {user_id} not found")
+                return
+            
+            payment = Payment.objects.create(
+                user=user,
+                stripe_session_id=session_id,
+                amount=session.get('amount_total', 0),
+                currency=session.get('currency', 'usd'),
+                status='processing',
+                customer_email=session.get('customer_details', {}).get('email', user.email)
+            )
+            print(f"ℹ️ [Webhook] Created payment record {payment.id} from webhook")
+        
+        # Update payment with payment_intent_id
+        if session.get('payment_intent'):
+            payment.stripe_payment_intent_id = session['payment_intent']
+        
+        # Mark as succeeded if payment was successful
+        if payment_status == 'paid':
+            payment.mark_succeeded()
+            print(f"✅ [Webhook] Payment {payment.id} marked as succeeded")
+        else:
+            payment.status = 'processing'
+            payment.save()
+            print(f"ℹ️ [Webhook] Payment {payment.id} status: {payment_status}")
+            
+    except Exception as e:
+        print(f"❌ [Webhook] Error in handle_checkout_session_completed: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def handle_checkout_session_failed(session):
+    """Process failed checkout session."""
+    from dashboard.models import Payment
+    
+    try:
+        session_id = session['id']
+        print(f"❌ [Webhook] Processing checkout.session.async_payment_failed: {session_id}")
+        
+        try:
+            payment = Payment.objects.get(stripe_session_id=session_id)
+            error_message = session.get('last_payment_error', {}).get('message', 'Payment failed')
+            payment.mark_failed(error_message)
+            print(f"❌ [Webhook] Payment {payment.id} marked as failed: {error_message}")
+        except Payment.DoesNotExist:
+            print(f"⚠️ [Webhook] Payment record not found for session {session_id}")
+            
+    except Exception as e:
+        print(f"❌ [Webhook] Error in handle_checkout_session_failed: {e}")
+
+
+def handle_payment_intent_succeeded(payment_intent):
+    """Process successful payment intent."""
+    from dashboard.models import Payment
+    
+    try:
+        payment_intent_id = payment_intent['id']
+        print(f"✅ [Webhook] Processing payment_intent.succeeded: {payment_intent_id}")
+        
+        # Find payment by payment_intent_id
+        try:
+            payment = Payment.objects.get(stripe_payment_intent_id=payment_intent_id)
+            payment.mark_succeeded()
+            print(f"✅ [Webhook] Payment {payment.id} marked as succeeded via payment_intent")
+        except Payment.DoesNotExist:
+            print(f"ℹ️ [Webhook] No payment record found for payment_intent {payment_intent_id}")
+            
+    except Exception as e:
+        print(f"❌ [Webhook] Error in handle_payment_intent_succeeded: {e}")
+
+
+def handle_payment_intent_failed(payment_intent):
+    """Process failed payment intent."""
+    from dashboard.models import Payment
+    
+    try:
+        payment_intent_id = payment_intent['id']
+        error_message = payment_intent.get('last_payment_error', {}).get('message', 'Payment failed')
+        
+        print(f"❌ [Webhook] Processing payment_intent.payment_failed: {payment_intent_id}")
+        
+        try:
+            payment = Payment.objects.get(stripe_payment_intent_id=payment_intent_id)
+            payment.mark_failed(error_message)
+            print(f"❌ [Webhook] Payment {payment.id} marked as failed: {error_message}")
+        except Payment.DoesNotExist:
+            print(f"⚠️ [Webhook] Payment record not found for payment_intent {payment_intent_id}")
+            
+    except Exception as e:
+        print(f"❌ [Webhook] Error in handle_payment_intent_failed: {e}")
 
 
 @login_required
@@ -1787,253 +2304,3 @@ def reset_payment_status(request):
         return JsonResponse({'success': False, 'error': 'Profile not found'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
-
-
-def is_google_oauth_user(user):
-    """Check if user is a Google OAuth user without a Django password"""
-    if not ALLAUTH_AVAILABLE:
-        return False
-    
-    try:
-        # Check if user has social accounts (OAuth)
-        has_social_account = SocialAccount.objects.filter(user=user).exists()
-        
-        # Check if user has a usable password set
-        has_password = user.has_usable_password()
-        
-        # User is Google OAuth if they have social accounts but no Django password
-        return has_social_account and not has_password
-    except Exception as e:
-        print(f"Error checking OAuth user status: {e}")
-        return False
-
-def generate_otp():
-    """Generate a 6-digit one-time password"""
-    return secrets.randbelow(900000) + 100000
-
-def send_otp_email(user_email, otp):
-    """Send OTP to user's email"""
-    try:
-        subject = 'Verification Code for Data Deletion - VisaGuardAI'
-        email_message = f"""
-Hello,
-
-You've requested to delete your data from VisaGuardAI. To confirm this action, please use the verification code below:
-
-Verification Code: {otp}
-
-This code will expire in 10 minutes.
-
-If you did not request this action, please contact our support team immediately.
-
-Best regards,
-VisaGuardAI Team
-"""
-        
-        send_mail(subject, email_message, settings.DEFAULT_FROM_EMAIL, [user_email])
-        return True
-    except Exception as e:
-        print(f"Error sending OTP email: {e}")
-        return False
-
-@login_required
-def data_deletion_view(request):
-    """View for data deletion confirmation page"""
-    return render(request, 'dashboard/data_deletion.html')
-
-
-@login_required
-@require_http_methods(["POST"])
-@csrf_exempt
-def confirm_data_deletion(request):
-    """
-    Handle data deletion confirmation with password verification.
-    Includes option for full account deletion vs data-only deletion.
-    """
-    try:
-        if not request.body:
-            return JsonResponse({
-                'success': False, 
-                'error': 'Invalid request data'
-            }, status=400)
-        
-        data = json.loads(request.body)
-        
-        # Validate required fields
-        password = data.get('password', '').strip()
-        otp = data.get('otp', '').strip()  # OTP for OAuth users
-        delete_account = data.get('delete_account', False)  # True for full account, False for data only
-        confirmation = data.get('confirmation', '').strip()
-        
-        user = request.user
-        
-        if confirmation.lower() not in ['yes', 'delete', 'confirm']:
-            return JsonResponse({
-                'success': False,
-                'error': 'Please type "YES" to confirm deletion'
-            })
-        
-        # Check if user is a Google OAuth user without password
-        if is_google_oauth_user(user):
-            # For OAuth users, use OTP verification instead of password
-            if not otp:
-                # Generate and send OTP if not provided
-                user_otp = generate_otp()
-                otp_key = f"deletion_otp_{user.id}"
-                
-                # Store OTP in cache for 10 minutes
-                cache.set(otp_key, user_otp, 600)  # 10 minutes
-                
-                # Send OTP to user's email
-                if send_otp_email(user.email, user_otp):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'OTP_REQUIRED',
-                        'message': f'A verification code has been sent to {user.email}. Please enter the 6-digit code to confirm the deletion.'
-                    })
-                else:
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'Failed to send verification code. Please try again or contact support.'
-                    })
-            else:
-                # Verify the provided OTP
-                otp_key = f"deletion_otp_{user.id}"
-                stored_otp = cache.get(otp_key)
-                
-                if not stored_otp:
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'Verification code has expired. Please request a new one.'
-                    })
-                
-                if str(otp) != str(stored_otp):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'Invalid verification code. Please check and try again.'
-                    })
-                
-                # OTP is valid, remove it from cache
-                cache.delete(otp_key)
-        else:
-            # For regular users, use password verification
-            if not password:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Password is required'
-                })
-            
-            # Verify password
-            authenticated_user = authenticate(username=user.username, password=password)
-            if not authenticated_user or authenticated_user != user:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Incorrect password'
-                })
-        
-        # Perform deletion in a transaction for safety
-        with transaction.atomic():
-            deleted_data = []
-            
-            if delete_account:
-                # Full account deletion - this will cascade delete related data
-                username = user.username
-                email = user.email
-                
-                # Delete user (this cascades to UserProfile, AnalysisSession, AnalysisResult)
-                user.delete()
-                
-                deleted_data.append(f"Full account deleted for {username} ({email})")
-                
-                # Log deletion for audit purposes
-                print(f"🔴 FULL ACCOUNT DELETION: {username} ({email}) at {timezone.now()}")
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Account and all data deleted successfully',
-                    'redirect_url': '/auth/login/',
-                    'full_deletion': True
-                })
-            
-            else:
-                # Data-only deletion - keep account but remove analysis data
-                username = user.username
-                
-                # Delete UserProfile data
-                try:
-                    user_profile = UserProfile.objects.get(user=user)
-                    
-                    # Clear social media usernames
-                    user_profile.instagram = None
-                    user_profile.linkedin = None
-                    user_profile.twitter = None
-                    user_profile.facebook = None
-                    user_profile.tiktok = None
-                    user_profile.instagram_connected = False
-                    user_profile.linkedin_connected = False
-                    user_profile.twitter_connected = False
-                    user_profile.facebook_connected = False
-                    user_profile.tiktok_connected = False
-                    
-                    # Clear optional data
-                    user_profile.country = None
-                    user_profile.university = None
-                    
-                    # Delete profile picture file
-                    if user_profile.profile_picture:
-                        try:
-                            if os.path.isfile(user_profile.profile_picture.path):
-                                os.remove(user_profile.profile_picture.path)
-                        except Exception as e:
-                            print(f"Could not delete profile picture: {e}")
-                        user_profile.profile_picture = None
-                    
-                    user_profile.save()
-                    deleted_data.append("User profile data cleared")
-                    
-                except UserProfile.DoesNotExist:
-                    pass
-                
-                # Delete AnalysisResults
-                analysis_results = AnalysisResult.objects.filter(user=user)
-                result_count = analysis_results.count()
-                analysis_results.delete()
-                if result_count > 0:
-                    deleted_data.append(f"{result_count} analysis result(s) deleted")
-                
-                # Delete AnalysisSessions
-                analysis_sessions = AnalysisSession.objects.filter(user=user)
-                session_count = analysis_sessions.count()
-                analysis_sessions.delete()
-                if session_count > 0:
-                    deleted_data.append(f"{session_count} analysis session(s) deleted")
-                
-                # Clear session data (if still active)
-                for key in list(request.session.keys()):
-                    if 'analysis' in key.lower() or 'social' in key.lower():
-                        del request.session[key]
-                
-                deleted_data.append("Session data cleared")
-                
-                # Log deletion for audit purposes
-                print(f"🟡 DATA DELETION: {username} at {timezone.now()}, removed: {', '.join(deleted_data)}")
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': f'Your data has been deleted: {", ".join(deleted_data)}',
-                    'deleted_items': deleted_data,
-                    'full_deletion': False
-                })
-    
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': 'Invalid JSON data'
-        }, status=400)
-    
-    except Exception as e:
-        print(f"Error during data deletion: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': 'An error occurred during deletion. Please try again or contact support.'
-        }, status=500)
