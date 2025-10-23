@@ -589,14 +589,16 @@ def dashboard(request):
     if request.method == 'POST':
         try:
             # DEBUG: Log all POST data
-            print(f"\n{'='*80}")
-            print(f"🔍 PROFILE SAVE DEBUG")
-            print(f"{'='*80}")
-            print(f"All POST keys: {list(request.POST.keys())}")
-            print(f"user-name: {request.POST.get('user-name', 'NOT FOUND')}")
-            print(f"user-country-application: {request.POST.get('user-country-application', 'NOT FOUND')}")
-            print(f"user-country-origin: {request.POST.get('user-country-origin', 'NOT FOUND')}")
-            print(f"{'='*80}\n")
+            import sys
+            sys.stderr.write(f"\n{'='*80}\n")
+            sys.stderr.write(f"🔍 PROFILE SAVE DEBUG\n")
+            sys.stderr.write(f"{'='*80}\n")
+            sys.stderr.write(f"All POST keys: {list(request.POST.keys())}\n")
+            sys.stderr.write(f"user-name: {request.POST.get('user-name', 'NOT FOUND')}\n")
+            sys.stderr.write(f"user-country-application: {request.POST.get('user-country-application', 'NOT FOUND')}\n")
+            sys.stderr.write(f"user-country-origin: {request.POST.get('user-country-origin', 'NOT FOUND')}\n")
+            sys.stderr.write(f"{'='*80}\n\n")
+            sys.stderr.flush()
 
             # Get form data
             username = request.POST.get('user-name', '').strip()
@@ -644,11 +646,13 @@ def dashboard(request):
                 user_profile.save()
                 
                 # DEBUG: Verify save
-                print(f"✅ Profile saved for user {request.user.username}")
-                print(f"   username: {user_profile.username}")
-                print(f"   country: {user_profile.country}")
-                print(f"   country_of_origin: {user_profile.country_of_origin}")
-                print(f"   country_of_application: {user_profile.country_of_application}")
+                import sys
+                sys.stderr.write(f"✅ Profile saved for user {request.user.username}\n")
+                sys.stderr.write(f"   username: {user_profile.username}\n")
+                sys.stderr.write(f"   country: {user_profile.country}\n")
+                sys.stderr.write(f"   country_of_origin: {user_profile.country_of_origin}\n")
+                sys.stderr.write(f"   country_of_application: {user_profile.country_of_application}\n")
+                sys.stderr.flush()
                 
                 messages.success(request, 'Profile updated successfully!')
             except UserProfile.DoesNotExist:
@@ -662,11 +666,13 @@ def dashboard(request):
                 )
                 
                 # DEBUG: Verify creation
-                print(f"✅ Profile created for user {request.user.username}")
-                print(f"   username: {user_profile.username}")
-                print(f"   country: {user_profile.country}")
-                print(f"   country_of_origin: {user_profile.country_of_origin}")
-                print(f"   country_of_application: {user_profile.country_of_application}")
+                import sys
+                sys.stderr.write(f"✅ Profile created for user {request.user.username}\n")
+                sys.stderr.write(f"   username: {user_profile.username}\n")
+                sys.stderr.write(f"   country: {user_profile.country}\n")
+                sys.stderr.write(f"   country_of_origin: {user_profile.country_of_origin}\n")
+                sys.stderr.write(f"   country_of_application: {user_profile.country_of_application}\n")
+                sys.stderr.flush()
                 
                 messages.success(request, 'Profile created successfully!')
                 
@@ -690,10 +696,12 @@ def dashboard(request):
         }
         
         # DEBUG: Log loaded profile data
-        print(f"\n📖 LOADING PROFILE DATA FOR USER: {request.user.username}")
-        print(f"   country_of_origin: '{user_profile.country_of_origin}'")
-        print(f"   country_of_application: '{user_profile.country_of_application}'")
-        print(f"   profile_data dict: {profile_data.get('country_of_origin')}, {profile_data.get('country_of_application')}\n")
+        import sys
+        sys.stderr.write(f"\n📖 LOADING PROFILE DATA FOR USER: {request.user.username}\n")
+        sys.stderr.write(f"   country_of_origin: '{user_profile.country_of_origin}'\n")
+        sys.stderr.write(f"   country_of_application: '{user_profile.country_of_application}'\n")
+        sys.stderr.write(f"   profile_data dict: {profile_data.get('country_of_origin')}, {profile_data.get('country_of_application')}\n\n")
+        sys.stderr.flush()
         # Get social media accounts
         social_accounts = {
             'instagram': user_profile.instagram,
