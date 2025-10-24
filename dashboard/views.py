@@ -487,7 +487,12 @@ def start_analysis(request):
             return JsonResponse({'success': False, 'error': 'Please connect at least one social account before starting analysis.'})
 
         # VALIDATE ACCOUNTS BEFORE STARTING ANALYSIS
-        print(f"🔍 Validating connected accounts before analysis...")
+        print(f"🔍 VALIDATING CONNECTED ACCOUNTS BEFORE ANALYSIS...")
+        print(f"   Instagram: {instagram_username}")
+        print(f"   LinkedIn: {linkedin_username}")
+        print(f"   Twitter: {twitter_username}")
+        print(f"   Facebook: {facebook_username}")
+        
         from .validators import validate_all_accounts
         
         try:
@@ -498,8 +503,8 @@ def start_analysis(request):
                 facebook_username=facebook_username
             )
             
-            print(f"📊 Validation complete: all_valid={all_valid}")
-            print(f"   Results: {validation_results}")
+            print(f"📊 VALIDATION COMPLETE: all_valid={all_valid}")
+            print(f"   Detailed results: {validation_results}")
             
             # Check if ANY account is valid
             if not all_valid:
@@ -519,19 +524,23 @@ def start_analysis(request):
                 
                 if invalid_accounts:
                     error_message = "Unable to analyze the following accounts:\\n" + "\\n".join(invalid_accounts)
-                    print(f"❌ Validation failed: {error_message}")
+                    print(f"❌ VALIDATION FAILED - BLOCKING ANALYSIS: {error_message}")
                     return JsonResponse({
                         'success': False,
                         'error': error_message,
                         'validation_failed': True
                     }, status=400)
+                else:
+                    print(f"⚠️ All accounts invalid but no invalid_accounts list - this shouldn't happen")
+            else:
+                print(f"✅ ALL ACCOUNTS VALIDATED - PROCEEDING WITH ANALYSIS")
         
         except Exception as validation_error:
-            print(f"⚠️ Validation error: {validation_error}")
-            # Continue with analysis even if validation fails (graceful degradation)
-            # But log the error for debugging
+            print(f"⚠️ VALIDATION ERROR: {validation_error}")
             import traceback
             traceback.print_exc()
+            # Continue with analysis even if validation fails (graceful degradation)
+            # But log the error for debugging
 
         # Reset payment status for new analysis (pay-per-analysis model)
         request.session['current_analysis_paid'] = False
