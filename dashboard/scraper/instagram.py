@@ -69,23 +69,37 @@ def analyze_instagram_posts(username, limit=10):
         import time
         start_time = time.time()
         
-        # Call with strict timeout to prevent hanging
-        run = apify_client.actor("apify/instagram-post-scraper").call(
-            run_input=run_input,
-            timeout_secs=60,   # Reduced to 60 seconds - faster failure detection
-            wait_secs=5        # Shorter wait for initial response
-        )
+        # Start actor without waiting - check status immediately
+        run = apify_client.actor("apify/instagram-post-scraper").start(run_input=run_input)
+        run_id = run.get("id")
         
+        print(f"📡 Actor started with run ID: {run_id}")
+        
+        # Poll for status - check every second for fast failure detection
+        max_wait = 10  # Maximum 10 seconds to detect failures
+        check_interval = 1  # Check every second
+        
+        for i in range(max_wait):
+            time.sleep(check_interval)
+            run_info = apify_client.run(run_id).get()
+            run_status = run_info.get("status")
+            
+            print(f"⏱️  Check {i+1}/{max_wait}: Status = {run_status}")
+            
+            # FAST FAILURE: If actor failed, return immediately
+            if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+                elapsed_time = time.time() - start_time
+                print(f"❌ Instagram scraper FAILED for @{username} in {elapsed_time:.1f}s")
+                print(f"   Status: {run_status} - Account may be private/suspended/nonexistent")
+                return []  # Return empty immediately
+            
+            # If succeeded, break and continue to scraping
+            if run_status == "SUCCEEDED":
+                break
+        
+        # Wait for actor to finish (only if not failed)
+        run = apify_client.run(run_id).wait_for_finish(timeout_secs=50)
         elapsed_time = time.time() - start_time
-        
-        # CHECK RUN STATUS IMMEDIATELY - Detect failures early
-        run_status = run.get("status")
-        print(f"📊 Apify run status: {run_status} (took {elapsed_time:.1f}s)")
-        
-        if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
-            print(f"❌ Instagram scraper FAILED for @{username} - Status: {run_status}")
-            print(f"   Account may be private, suspended, or doesn't exist")
-            return []  # Return empty list - will be caught by validation
         
         if elapsed_time > 100:  # If it took too long, return timeout error
             print(f"⏰ Instagram actor took too long ({elapsed_time:.1f}s) for @{username}")
