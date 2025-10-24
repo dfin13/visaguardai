@@ -487,11 +487,15 @@ def start_analysis(request):
             return JsonResponse({'success': False, 'error': 'Please connect at least one social account before starting analysis.'})
 
         # VALIDATE ACCOUNTS BEFORE STARTING ANALYSIS
-        print(f"🔍 VALIDATING CONNECTED ACCOUNTS BEFORE ANALYSIS...")
-        print(f"   Instagram: {instagram_username}")
-        print(f"   LinkedIn: {linkedin_username}")
-        print(f"   Twitter: {twitter_username}")
-        print(f"   Facebook: {facebook_username}")
+        import sys
+        sys.stderr.write(f"\n{'='*80}\n")
+        sys.stderr.write(f"🔍 VALIDATING CONNECTED ACCOUNTS BEFORE ANALYSIS...\n")
+        sys.stderr.write(f"   Instagram: {instagram_username}\n")
+        sys.stderr.write(f"   LinkedIn: {linkedin_username}\n")
+        sys.stderr.write(f"   Twitter: {twitter_username}\n")
+        sys.stderr.write(f"   Facebook: {facebook_username}\n")
+        sys.stderr.write(f"{'='*80}\n")
+        sys.stderr.flush()
         
         from .validators import validate_all_accounts
         
@@ -503,8 +507,9 @@ def start_analysis(request):
                 facebook_username=facebook_username
             )
             
-            print(f"📊 VALIDATION COMPLETE: all_valid={all_valid}")
-            print(f"   Detailed results: {validation_results}")
+            sys.stderr.write(f"📊 VALIDATION COMPLETE: all_valid={all_valid}\n")
+            sys.stderr.write(f"   Detailed results: {validation_results}\n")
+            sys.stderr.flush()
             
             # Check if ANY account is valid
             if not all_valid:
@@ -524,23 +529,31 @@ def start_analysis(request):
                 
                 if invalid_accounts:
                     error_message = "Unable to analyze the following accounts:\\n" + "\\n".join(invalid_accounts)
-                    print(f"❌ VALIDATION FAILED - BLOCKING ANALYSIS: {error_message}")
+                    sys.stderr.write(f"❌ VALIDATION FAILED - BLOCKING ANALYSIS: {error_message}\n")
+                    sys.stderr.flush()
                     return JsonResponse({
                         'success': False,
                         'error': error_message,
                         'validation_failed': True
                     }, status=400)
                 else:
-                    print(f"⚠️ All accounts invalid but no invalid_accounts list - this shouldn't happen")
+                    sys.stderr.write(f"⚠️ All accounts invalid but no invalid_accounts list - this shouldn't happen\n")
+                    sys.stderr.flush()
             else:
-                print(f"✅ ALL ACCOUNTS VALIDATED - PROCEEDING WITH ANALYSIS")
+                sys.stderr.write(f"✅ ALL ACCOUNTS VALIDATED - PROCEEDING WITH ANALYSIS\n")
+                sys.stderr.flush()
         
         except Exception as validation_error:
-            print(f"⚠️ VALIDATION ERROR: {validation_error}")
+            sys.stderr.write(f"⚠️ VALIDATION ERROR: {validation_error}\n")
+            sys.stderr.flush()
             import traceback
             traceback.print_exc()
-            # Continue with analysis even if validation fails (graceful degradation)
-            # But log the error for debugging
+            # DON'T continue with analysis if validation fails - return error
+            return JsonResponse({
+                'success': False,
+                'error': 'Account validation service temporarily unavailable. Please try again.',
+                'validation_failed': True
+            }, status=500)
 
         # Reset payment status for new analysis (pay-per-analysis model)
         request.session['current_analysis_paid'] = False
