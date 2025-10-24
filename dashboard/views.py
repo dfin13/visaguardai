@@ -1404,34 +1404,45 @@ def result_view(request):
     twitter_profile = get_profile_summary('twitter')
     facebook_profile = get_profile_summary('facebook')
     
-    # Ensure we have profile data for connected platforms even if analysis failed
-    if not instagram_profile and instagram_username:
+    # Only show profile data for platforms that were analyzed in THIS session
+    # Check platforms_analyzed session variable to filter
+    print(f"🔍 [FILTER DEBUG] Platforms analyzed in this session: {platforms_analyzed}")
+    
+    if not instagram_profile and instagram_username and 'instagram' in platforms_analyzed:
         instagram_profile = {
             'username': instagram_username,
             'full_name': instagram_username.replace('_', ' ').replace('-', ' ').title(),
             'assessment': 'Profile connected but analysis not available'
         }
+    elif 'instagram' not in platforms_analyzed:
+        instagram_profile = None  # Don't show if not analyzed
     
-    if not linkedin_profile and linkedin_username:
+    if not linkedin_profile and linkedin_username and 'linkedin' in platforms_analyzed:
         linkedin_profile = {
             'username': linkedin_username,
             'full_name': linkedin_username.replace('_', ' ').replace('-', ' ').title(),
             'assessment': 'Profile connected but analysis not available'
         }
+    elif 'linkedin' not in platforms_analyzed:
+        linkedin_profile = None  # Don't show if not analyzed
     
-    if not twitter_profile and twitter_username:
+    if not twitter_profile and twitter_username and 'twitter' in platforms_analyzed:
         twitter_profile = {
             'username': twitter_username,
             'full_name': twitter_username.replace('_', ' ').replace('-', ' ').title(),
             'assessment': 'Profile connected but analysis not available'
         }
+    elif 'twitter' not in platforms_analyzed:
+        twitter_profile = None  # Don't show if not analyzed
     
-    if not facebook_profile and facebook_username:
+    if not facebook_profile and facebook_username and 'facebook' in platforms_analyzed:
         facebook_profile = {
             'username': facebook_username,
             'full_name': facebook_username.replace('_', ' ').replace('-', ' ').title(),
             'assessment': 'Profile connected but analysis not available'
         }
+    elif 'facebook' not in platforms_analyzed:
+        facebook_profile = None  # Don't show if not analyzed
     
     # DEBUG: Print what profile summaries we're getting
     print(f"🔍 [PROFILE DEBUG] Instagram profile: {instagram_profile}")
