@@ -62,7 +62,8 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
     actor_id = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
     run_input = {
         "searchTerms": [f"from:{username}"],
-        "maxItems": tweets_desired,  # Enforces 10 tweet limit
+        "maxTweets": tweets_desired,  # Use maxTweets instead of maxItems
+        "maxItems": tweets_desired,   # Keep both for compatibility
         "addUserInfo": True,
         "includeSearchTerms": False,
         "onlyImage": False,
@@ -70,16 +71,52 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         "onlyTwitterBlue": False,
         "onlyVerifiedUsers": False,
         "onlyVideo": False,
+        "queryType": "Latest",  # Add query type
     }
 
     try:
-        # === RUN ACTOR ===
+        # === RUN ACTOR WITH STRICT TIMEOUT ===
         print("Starting Apify actor (kaitoeasyapi/twitter-x-data-tweet-scraper)...")
         print(f"✅ Using pay-per-result actor with limit: {tweets_desired} tweets")
-        run = apify_client.actor(actor_id).call(run_input=run_input, wait_secs=15)
         
-        # Wait for dataset to populate
-        time.sleep(5)
+        import time
+        start_time = time.time()
+        
+        # Use very short timeout to prevent hanging - actors should respond quickly
+        run = apify_client.actor(actor_id).call(run_input=run_input, wait_secs=5, timeout_secs=60)
+        
+        elapsed_time = time.time() - start_time
+        
+        # CHECK RUN STATUS IMMEDIATELY - Detect failures early
+        run_status = run.get("status")
+        print(f"📊 Apify run status: {run_status} (took {elapsed_time:.1f}s)")
+        
+        if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+            print(f"❌ Twitter scraper FAILED for @{username} - Status: {run_status}")
+            print(f"   Account may be private, suspended, or doesn't exist")
+            return []  # Return empty list - will be caught by validation
+        
+        if elapsed_time > 100:  # If it took too long, assume timeout
+            print(f"⏰ Twitter actor took too long ({elapsed_time:.1f}s) for @{username}")
+            return [{
+                "post": f"⚠️ Unable to analyze Twitter account @{username}",
+                "post_data": {
+                    "caption": None,
+                    "data_unavailable": True,
+                    "error": "Scraping service timed out",
+                    "error_type": "timeout"
+                },
+                "analysis": {
+                    "Twitter": {
+                        "content_reinforcement": {"status": "error", "reason": "Service timeout - please try again", "recommendation": "Account may be temporarily inaccessible"},
+                        "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                        "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                        "risk_score": -1
+                    }
+                }
+            }]
+        
+        print(f"✅ Actor call completed in {elapsed_time:.1f}s")
         
         # === GET DATASET ITEMS WITH HARD LIMIT ===
         # CRITICAL: Use limit parameter to prevent pulling all tweets
@@ -87,8 +124,11 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         dataset_items = apify_client.dataset(run["defaultDatasetId"]).list_items(limit=tweets_desired).items
         print(f"Retrieved {len(dataset_items)} items from dataset (HARD LIMIT: {tweets_desired})")
         
-        # Debug: show raw dataset items
-        print("Raw dataset items:", json.dumps(dataset_items[:2], indent=2))
+        # Debug: show raw dataset items (first 2 items only for debugging)
+        if dataset_items:
+            print("Raw dataset items:", json.dumps(dataset_items[:2], indent=2))
+        else:
+            print("No dataset items returned from actor")
         
         # === Extract tweets with all metadata ===
         tweets = []
@@ -152,6 +192,8 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                     0
                 )
                 
+                # User information extraction removed - no longer needed
+                
                 # Extract hashtags and mentions
                 hashtags = []
                 mentions = []
@@ -182,7 +224,23 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         # Check if we got any real tweets (all might have been mock data)
         if len(tweets) == 0:
             print(f"❌ No real tweets found for @{username} (only mock/demo data or account doesn't exist)")
-            return f"Twitter account @{username} not found or has no tweets. Please verify the username is correct and the account is public."
+            return [{
+                "post": f"⚠️ Unable to analyze Twitter account @{username}",
+                "post_data": {
+                    "caption": None,
+                    "data_unavailable": True,
+                    "error": f"Twitter account @{username} not found or has no tweets. Please verify the username is correct and the account is public.",
+                    "error_type": "account_not_found"
+                },
+                "analysis": {
+                    "Twitter": {
+                        "content_reinforcement": {"status": "error", "reason": "Account not found or has no tweets", "recommendation": "Verify the username is correct and the account is public"},
+                        "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                        "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                        "risk_score": -1
+                    }
+                }
+            }]
         
         # Check if account is accessible
         is_accessible, result = check_scraping_result([{"tweet": t["tweet"]} for t in tweets], "Twitter", username)
@@ -191,10 +249,23 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
             
     except TypeError as e:
         print(f"Error calling Apify task: {e}")
-        if is_account_private_error(str(e)):
-            return create_inaccessible_account_response("Twitter", username, "is private or inaccessible")
-        else:
-            return create_inaccessible_account_response("Twitter", username, "could not be accessed")
+        return [{
+            "post": f"⚠️ Unable to analyze Twitter account @{username}",
+            "post_data": {
+                "caption": None,
+                "data_unavailable": True,
+                "error": str(e),
+                "error_type": "scraping_failed"
+            },
+            "analysis": {
+                "Twitter": {
+                    "content_reinforcement": {"status": "error", "reason": "Account not found or has no tweets", "recommendation": "Verify the username is correct and the account is public"},
+                    "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                    "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                    "risk_score": -1
+                }
+            }
+        }]
     except Exception as e:
         print(f"Error during Twitter analysis: {str(e)}")
         error_str = str(e).lower()
@@ -205,10 +276,23 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                 to_email="syedawaisalishah46@gmail.com"
             )
         
-        if is_account_private_error(str(e)):
-            return create_inaccessible_account_response("Twitter", username, "is private or inaccessible")
-        else:
-            return create_inaccessible_account_response("Twitter", username, "could not be accessed")
+        return [{
+            "post": f"⚠️ Unable to analyze Twitter account @{username}",
+            "post_data": {
+                "caption": None,
+                "data_unavailable": True,
+                "error": str(e),
+                "error_type": "scraping_failed"
+            },
+            "analysis": {
+                "Twitter": {
+                    "content_reinforcement": {"status": "error", "reason": "Account not found or has no tweets", "recommendation": "Verify the username is correct and the account is public"},
+                    "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                    "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                    "risk_score": -1
+                }
+            }
+        }]
 
     print(f"🤖 Starting intelligent analysis for {len(tweets)} tweets...")
     
@@ -265,18 +349,18 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
                     'data_unavailable': True,
                 },
                 "analysis": {  # Added "analysis" wrapper to match template expectations
-                    "Twitter": {
-                        "content_reinforcement": {
+                "Twitter": {
+                    "content_reinforcement": {
                             "status": "Needs Improvement",
                             "reason": f"Analysis error: {str(e)[:80]}",
                             "recommendation": "Try again later"
-                        },
-                        "content_suppression": {
+                    },
+                    "content_suppression": {
                             "status": "Caution",
                             "reason": "Could not assess content",
                             "recommendation": "Manual review recommended"
-                        },
-                        "content_flag": {
+                    },
+                    "content_flag": {
                             "status": "Safe",
                             "reason": "No data available",
                             "recommendation": "Review manually"
@@ -289,6 +373,72 @@ def analyze_twitter_profile(username: str, tweets_desired: int = 10):
         return fallback_analysis  # Return list, not JSON string
 
 
+def analyze_with_sample_tweets():
+    """Fallback function with sample tweets for testing"""
+    sample_tweets = [
+        "Just had a great meeting with the team! #productivity",
+        "Looking forward to the weekend! ",
+        "Interesting article about technology trends: https://example.com"
+    ]
+    
+    tweets_text = "\n".join(f"- {tweet}" for tweet in sample_tweets)
+    
+    prompt = f"""
+    Analyze these sample tweets and return JSON as requested:
+    {tweets_text}
+    """
+    
+    response = client_ai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0,
+    )
+    
+    return response.choices[0].message.content
+
+def test_user_existence(username: str):
+    """Test if a Twitter user exists using a different approach"""
+    try:
+        actor_id = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
+        run_input = {
+            "searchTerms": [f"from:{username}"],
+            "maxTweets": 1,
+            "addUserInfo": True,
+            "includeSearchTerms": False,
+            "onlyImage": False,
+            "onlyQuote": False,
+            "onlyTwitterBlue": False,
+            "onlyVerifiedUsers": False,
+            "onlyVideo": False,
+        }
+        
+        run = apify_client.actor(actor_id).call(run_input=run_input)
+        dataset_items = apify_client.dataset(run["defaultDatasetId"]).list_items(limit=1).items
+        
+        return len(dataset_items) > 0
+    except:
+        return False
+
+if __name__ == "__main__":
+    username = "syedAsimBacha10"   # without @
+    tweets_desired = 5
+    
+    print(f"Testing if user {username} exists...")
+    user_exists = test_user_existence(username)
+    print(f"User exists: {user_exists}")
+    
+    if user_exists:
+        result = analyze_twitter_profile(username, tweets_desired)
+        print("Analysis result:")
+        print(result)
+    else:
+        print(f"User {username} may not exist or account is private")
+        result = analyze_with_sample_tweets()
+        print("Fallback analysis result:")
+        print(result)
 def analyze_with_sample_tweets():
     """Fallback function with sample tweets for testing"""
     sample_tweets = [

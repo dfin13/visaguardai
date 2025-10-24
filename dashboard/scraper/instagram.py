@@ -65,8 +65,52 @@ def analyze_instagram_posts(username, limit=10):
 
     print(f"📡 Triggering Apify Instagram scraper for {username}...")
     try:
-        run = apify_client.actor("apify/instagram-post-scraper").call(run_input=run_input)
-        print(f"✅ Apify run completed! Run ID: {run.get('id', 'unknown')}")
+        # Add timeout to prevent hanging on problematic accounts
+        import time
+        start_time = time.time()
+        
+        # Call with strict timeout to prevent hanging
+        run = apify_client.actor("apify/instagram-post-scraper").call(
+            run_input=run_input,
+            timeout_secs=60,   # Reduced to 60 seconds - faster failure detection
+            wait_secs=5        # Shorter wait for initial response
+        )
+        
+        elapsed_time = time.time() - start_time
+        
+        # CHECK RUN STATUS IMMEDIATELY - Detect failures early
+        run_status = run.get("status")
+        print(f"📊 Apify run status: {run_status} (took {elapsed_time:.1f}s)")
+        
+        if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+            print(f"❌ Instagram scraper FAILED for @{username} - Status: {run_status}")
+            print(f"   Account may be private, suspended, or doesn't exist")
+            return []  # Return empty list - will be caught by validation
+        
+        if elapsed_time > 100:  # If it took too long, return timeout error
+            print(f"⏰ Instagram actor took too long ({elapsed_time:.1f}s) for @{username}")
+            return [{
+                "post": f"⚠️ Unable to analyze Instagram account @{username}",
+                "post_data": {
+                    "post_id": None,
+                    "caption": None,
+                    "created_at": None,
+                    "post_url": None,
+                    "data_unavailable": True,
+                    "error": "Scraping service timed out",
+                    "error_type": "timeout"
+                },
+                "analysis": {
+                    "Instagram": {
+                        "content_reinforcement": {"status": "error", "reason": "Service timeout - please try again", "recommendation": "Account may be temporarily inaccessible"},
+                        "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                        "content_flag": {"status": "error", "reason": "No data available", "recommendation": None},
+                        "risk_score": -1
+                    }
+                }
+            }]
+        
+        print(f"✅ Apify run completed in {elapsed_time:.1f}s! Run ID: {run.get('id', 'unknown')}")
         print(f"   Dataset ID: {run.get('defaultDatasetId', 'unknown')}")
         
         # Extract full post data with all available fields
@@ -103,7 +147,6 @@ def analyze_instagram_posts(username, limit=10):
                 
                 # Additional metadata
                 "owner_username": item.get("ownerUsername"),
-                "owner_full_name": item.get("ownerFullName"),
                 "is_sponsored": item.get("isSponsored", False),
                 "comments_disabled": item.get("isCommentsDisabled", False),
                 
@@ -125,6 +168,29 @@ def analyze_instagram_posts(username, limit=10):
         print(f"✅ Scraped {len(posts_data)} Instagram posts (capped at 10)")
         if posts_data:
             print(f"   First post: ID={posts_data[0]['post_id']}, Type={posts_data[0]['type']}, Timestamp={posts_data[0]['created_at']}")
+        else:
+            print(f"⚠️ No posts found for @{username} - account may be private, empty, or inaccessible")
+            # Return proper response for empty account
+            return [{
+                "post": f"No posts found for Instagram account @{username}",
+                "post_data": {
+                    "post_id": None,
+                    "caption": None,
+                    "created_at": None,
+                    "post_url": None,
+                    "data_unavailable": True,
+                    "error": "No posts found",
+                    "error_type": "empty_account"
+                },
+                "analysis": {
+                    "Instagram": {
+                        "content_reinforcement": {"status": "info", "reason": "Account has no accessible posts", "recommendation": None},
+                        "content_suppression": {"status": "info", "reason": "No posts to analyze", "recommendation": None},
+                        "content_flag": {"status": "info", "reason": "No posts available", "recommendation": None},
+                        "risk_score": 0
+                    }
+                }
+            }]
         
         # Check if account is accessible
         is_accessible, result = check_scraping_result(posts_text_only, "Instagram", username)
@@ -134,7 +200,19 @@ def analyze_instagram_posts(username, limit=10):
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ Instagram scraping failed: {e}")
+        
+        # Check if it's a timeout or connection issue
+        error_message = str(e).lower()
+        if 'timeout' in error_message or 'timed out' in error_message:
+            print(f"⏰ Instagram scraping timed out for @{username} (2min limit reached)")
+            error_reason = "Scraping timed out - account may have limited accessibility"
+        elif 'connection' in error_message or 'network' in error_message:
+            print(f"🌐 Instagram scraping network error for @{username}")
+            error_reason = "Network connection issue during scraping"
+        else:
+            print(f"❌ Instagram scraping failed for @{username}: {e}")
+            error_reason = f"Scraping failed: {str(e)[:100]}"
+        
         print(f"Full traceback:\n{error_trace}")
         
         # Return structured error object (no fabricated data)
@@ -151,7 +229,7 @@ def analyze_instagram_posts(username, limit=10):
             },
             "analysis": {
                 "Instagram": {
-                    "content_reinforcement": {"status": "error", "reason": f"Scraping failed: {str(e)}", "recommendation": None},
+                    "content_reinforcement": {"status": "error", "reason": error_reason, "recommendation": "Try again later or verify account is public"},
                     "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
                     "content_flag": {"status": "error", "reason": "No data available", "recommendation": None},
                     "risk_score": -1
@@ -205,3 +283,92 @@ def analyze_instagram_posts(username, limit=10):
 #     username = "asim._.19"   # <- change this to test
 #     result = analyze_instagram_posts(username, limit=5)
 #     print(json.dumps(result, indent=2))
+
+        print(f"Instagram scraping failed: {e}")
+        # Check if error indicates private/inaccessible account
+        if is_account_private_error(str(e)):
+            return create_inaccessible_account_response("Instagram", username, "is private or inaccessible")
+        else:
+            # For other errors (API issues, etc.), return a generic inaccessible response
+            return create_inaccessible_account_response("Instagram", username, "could not be accessed")
+
+    # ==== Build Prompt ====
+    posts_text = "\n\n".join([f"Post {i+1}: {text}" for i, text in enumerate(posts)])
+    prompt = f"""
+You are an AI-based content recommendation engine.
+Analyze the following Instagram posts and return ONLY valid JSON.
+
+Schema per post:
+[
+  {{
+    "Instagram": {{
+      "content_reinforcement": {{
+        "status": "safe|caution|warning",
+        "recommendation": "string or null",
+        "reason": "string"
+      }},
+      "content_suppression": {{
+        "status": "safe|caution|warning",
+        "recommendation": "string or null",
+        "reason": "string"
+      }},
+      "content_flag": {{
+        "status": "safe|caution|warning",
+        "recommendation": "string or null",
+        "reason": "string"
+      }},
+      "risk_score": 0
+    }}
+  }}
+]
+
+Posts:
+{posts_text}
+"""
+
+    # ==== AI CALL ====
+    try:
+        completion = client_ai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful AI assistant that returns valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0,
+        )
+
+        ai_response = completion.choices[0].message.content
+
+        # Clean up ```json fences if present
+        ai_response = (
+            ai_response.strip()
+            .removeprefix("```json")
+            .removeprefix("```")
+            .removesuffix("```")
+            .strip()
+        )
+
+        try:
+            results = json.loads(ai_response)
+        except Exception as je:
+            print(f"JSON parsing failed: {je}\nRaw AI response: {ai_response}")
+            results = [{"Instagram": {"error": "AI parsing failed", "raw": ai_response}} for _ in posts]
+    except Exception as e:
+        print(f"AI analysis failed: {e}")
+        results = [{"Instagram": {"error": "AI call failed", "raw": str(e)}} for _ in posts]
+
+    # ==== Final output ====
+    final = []
+    for i, post in enumerate(posts):
+        analysis = results[i] if isinstance(results, list) and i < len(results) else results
+        final.append({"post": post, "analysis": analysis})
+
+    return final
+
+
+# # ==== Example Run ====
+# if __name__ == "__main__":
+#     username = "asim._.19"   # <- change this to test
+#     result = analyze_instagram_posts(username, limit=5)
+#     print(json.dumps(result, indent=2))
+

@@ -84,12 +84,49 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
         print(f"   Mode: Latest posts only (no feed scanning)")
         print(f"   Actor: apimaestro/linkedin-profile-posts (approved actor)")
         
-        # Use approved LinkedIn actor: apimaestro/linkedin-profile-posts
-        # Add timeout to fail fast if actor hangs (max 60 seconds)
+        # Use approved LinkedIn actor with strict timeout
+        import time
+        start_time = time.time()
+        
         run = apify_client.actor("apimaestro/linkedin-profile-posts").call(
             run_input=run_input,
-            timeout_secs=60  # Fail fast if it takes too long
+            timeout_secs=60,   # Reduced to 60 seconds - faster failure detection
+            wait_secs=5        # Shorter wait for initial response
         )
+        
+        elapsed_time = time.time() - start_time
+        
+        # CHECK RUN STATUS IMMEDIATELY - Detect failures early
+        run_status = run.get("status")
+        print(f"📊 Apify run status: {run_status} (took {elapsed_time:.1f}s)")
+        
+        if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+            print(f"❌ LinkedIn scraper FAILED for @{username} - Status: {run_status}")
+            print(f"   Account may be private, suspended, or doesn't exist")
+            return []  # Return empty list - will be caught by validation
+        
+        if elapsed_time > 100:  # If too slow, return timeout error
+            print(f"⏰ LinkedIn actor took too long ({elapsed_time:.1f}s)")
+            return None, [{
+                "post": f"⚠️ Unable to analyze LinkedIn account @{username}",
+                "post_data": {
+                    "caption": None,
+                    "created_at": None,
+                    "post_url": None,
+                    "data_unavailable": True,
+                    "error": "Scraping service timed out",
+                    "error_type": "timeout"
+                },
+                "analysis": {
+                    "LinkedIn": {
+                        "content_reinforcement": {"status": "error", "reason": "Service timeout - please try again", "recommendation": "Account may be temporarily inaccessible"},
+                        "content_suppression": {"status": "error", "reason": "No data available", "recommendation": None},
+                        "content_flag": {"status": "error", "reason": "Unable to assess", "recommendation": None},
+                        "risk_score": -1
+                    }
+                }
+            }]
+        
         if not run or "defaultDatasetId" not in run:
             raise Exception("No dataset from actor")
     except Exception as e:
@@ -119,6 +156,15 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
             item.get("link") or item.get("permalink") or None
         )
         
+        # Extract author/profile name information
+        # DEBUG: Print what fields are available in the Apify response
+        if post_count == 0:  # Only print for first post to avoid spam
+            print(f"🔍 [LINKEDIN APIFY DEBUG] Item keys: {list(item.keys())}")
+            if item.get("author"):
+                print(f"🔍 [LINKEDIN APIFY DEBUG] Author object: {item.get('author')}")
+        
+        # Author name extraction removed - no longer needed
+        
         if post_text:
             posts.append({
                 "post_text": post_text,
@@ -126,6 +172,7 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
                 "timestamp": item.get("timestamp") or item.get("created_at") or item.get("date"),
                 "reactions": item.get("reactions") or item.get("likes") or 0,
                 "comments": item.get("comments") or item.get("commentsCount") or 0,
+                "author_name": author_name,
             })
             post_count += 1
             print(f"   ✓ Collected post {post_count}/{limit} (URL: {'✓' if post_url else '✗'})")
@@ -171,6 +218,7 @@ def analyze_posts_with_ai(posts):
             'post_text': post.get('post_text', ''),
             'post_url': post.get('post_url'),  # Add post URL for template display
             'created_at': post.get('timestamp'),
+            'timestamp': post.get('timestamp'),  # Add timestamp field for consistency with other platforms
             'likes_count': post.get('reactions', 0),
             'comments_count': post.get('comments', 0),
             'type': 'text',
