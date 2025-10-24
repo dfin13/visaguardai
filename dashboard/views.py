@@ -1253,6 +1253,35 @@ def connect_social_account(request):
         if not username:
             return JsonResponse({'success': False, 'message': 'Username is required'})
         
+        # VALIDATE ACCOUNT BEFORE SAVING
+        print(f"🔍 Validating {platform} account @{username} before connecting...")
+        from .validators import (
+            validate_instagram_account,
+            validate_linkedin_account,
+            validate_twitter_account,
+            validate_facebook_account
+        )
+        
+        # Choose validator based on platform
+        validator_map = {
+            'instagram': validate_instagram_account,
+            'linkedin': validate_linkedin_account,
+            'twitter': validate_twitter_account,
+            'facebook': validate_facebook_account
+        }
+        
+        validator = validator_map.get(platform)
+        if validator:
+            is_valid, message = validator(username)
+            if not is_valid:
+                print(f"❌ Validation failed for {platform} @{username}: {message}")
+                return JsonResponse({
+                    'success': False,
+                    'message': f"This account doesn't exist or is private.",
+                    'validation_failed': True
+                })
+            print(f"✅ Validation passed for {platform} @{username}")
+        
         # All platforms now use database storage
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, username)
@@ -1265,6 +1294,9 @@ def connect_social_account(request):
     except UserProfile.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Profile not found'})
     except Exception as e:
+        print(f"❌ Error connecting {platform} account: {e}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'success': False, 'message': str(e)})
 @login_required
 def result_view(request):
