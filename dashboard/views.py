@@ -1933,34 +1933,36 @@ def payment_view(request):
             try:
                 import json
                 
-                # Check for very recent pending payment (within last 5 minutes) to prevent accidental double-clicks
+                # Check for very recent pending payment (within last 30 seconds) to prevent accidental double-clicks
                 from django.utils import timezone
                 from datetime import timedelta
                 
-                five_minutes_ago = timezone.now() - timedelta(minutes=5)
-                existing_recent_payment = Payment.objects.filter(
+                thirty_seconds_ago = timezone.now() - timedelta(seconds=30)
+                existing_very_recent_payment = Payment.objects.filter(
                     user=request.user,
                     status__in=['pending', 'processing'],
-                    created_at__gte=five_minutes_ago  # Only check very recent payments
+                    created_at__gte=thirty_seconds_ago  # Only check very recent payments (30 seconds)
                 ).first()
                 
-                if existing_recent_payment:
-                    # Return existing session ID only if it's very recent (prevents double-clicks)
-                    print(f"ℹ️ [Payment] User {request.user.username} has recent {existing_recent_payment.status} payment (created {existing_recent_payment.created_at})")
+                if existing_very_recent_payment:
+                    # Return existing session ID only if it's VERY recent (prevents accidental double-clicks)
+                    print(f"ℹ️ [Payment] User {request.user.username} has very recent {existing_very_recent_payment.status} payment (created {existing_very_recent_payment.created_at})")
+                    print(f"   Reusing session to prevent double-click")
                     return JsonResponse({
-                        'id': existing_recent_payment.stripe_session_id,
+                        'id': existing_very_recent_payment.stripe_session_id,
                         'message': 'Using existing recent payment session'
                     })
                 
-                # If old pending payments exist (>5 min), mark them as expired and create new session
+                # Mark ALL old pending/processing payments as expired (allows user to pay multiple times)
                 old_pending = Payment.objects.filter(
                     user=request.user,
                     status__in=['pending', 'processing'],
-                    created_at__lt=five_minutes_ago
+                    created_at__lt=thirty_seconds_ago  # Anything older than 30 seconds
                 )
                 if old_pending.exists():
                     old_pending.update(status='expired')
-                    print(f"🕒 [Payment] Marked {old_pending.count()} old pending payments as expired")
+                    print(f"🕒 [Payment] Marked {old_pending.count()} old pending payments as expired for new scan")
+                    print(f"   User can now create new checkout session for another scan")
                 
                 # Get promo code from request if provided
                 try:
