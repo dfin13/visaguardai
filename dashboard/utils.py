@@ -172,15 +172,8 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         for future in as_completed(futures):
             try:
                 platform_name, platform_result = future.result()
-                
-                # CHECK IF RESULT IS VALID (not empty, not error)
-                if platform_result is None or (isinstance(platform_result, list) and len(platform_result) == 0):
-                    print(f"❌ {platform_name.title()} returned NO DATA - account may be private/fake/nonexistent")
-                    # Don't add to results - this platform failed
-                    continue
-                
                 results[platform_name] = platform_result
-                print(f"✅ {platform_name.title()} analysis completed with {len(platform_result) if isinstance(platform_result, list) else 'data'}")
+                print(f"✅ {platform_name.title()} analysis completed")
             except Exception as e:
                 print(f"❌ Platform analysis error: {e}")
                 import traceback
@@ -188,13 +181,6 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     
     elapsed = time.time() - start_time
     print(f"⏱️  Parallel analysis completed in {elapsed:.2f} seconds")
-    
-    # CHECK: If NO platforms returned valid data, mark analysis as FAILED
-    if not results or all(not v for v in results.values()):
-        print(f"❌ ALL PLATFORMS FAILED - No valid accounts found")
-        cache.set(f'analysis_stage_{user_id}', 'failed', timeout=60*60)
-        cache.set(f'analysis_error_{user_id}', 'All connected accounts are private, invalid, or returned no data.', timeout=60*60)
-        return
     
     # Skip all profile generation - just cache analysis results directly
     print(f"📦 Caching results to cache (skipping profile generation):")
@@ -222,3 +208,243 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     
     print(f"✅ All results cached successfully")
     print(f"\n✅ Background analysis completed for user {user_id}\n")
+    
+    # Profile generation - Extract full name from scraped Instagram data (first post)
+    if instagram_username:
+        scraped_full_name = "User"
+        if isinstance(results.get('instagram'), list) and len(results['instagram']) > 0:
+            first_post = results['instagram'][0]
+            if isinstance(first_post, dict):
+                # Check multiple possible locations for the full name
+                # First check post_data (which contains the raw scraped data)
+                post_data = first_post.get('post_data', {})
+                
+                # DEBUG: Print what we have in the data
+                print(f"🔍 [INSTAGRAM DEBUG] First post keys: {list(first_post.keys())}")
+                print(f"🔍 [INSTAGRAM DEBUG] Post_data keys: {list(post_data.keys())}")
+                print(f"🔍 [INSTAGRAM DEBUG] owner_full_name from post_data: {post_data.get('owner_full_name')}")
+                print(f"🔍 [INSTAGRAM DEBUG] owner_full_name from first_post: {first_post.get('owner_full_name')}")
+                
+                scraped_full_name = (
+                    post_data.get('owner_full_name') or
+                    post_data.get('ownerFullName') or
+                    first_post.get('owner_full_name') or
+                    first_post.get('ownerFullName') or
+                    "User"
+                )
+                
+                print(f"🔍 [INSTAGRAM DEBUG] Final scraped_full_name: {scraped_full_name}")
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("Instagram", instagram_username)
+        results['instagram_profile'] = {
+            'username': instagram_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
+        cache.set(f'instagram_profile_{user_id}', results['instagram_profile'], 3600)
+    
+    # Process Twitter results and generate profile
+    if twitter_username:
+        # Extract full name from scraped Twitter data (first post)
+        scraped_full_name = "User"
+        
+        # Try to get author name from post data first
+        if 'twitter' in results and isinstance(results.get('twitter'), list) and len(results['twitter']) > 0:
+            first_post = results['twitter'][0]
+            if isinstance(first_post, dict):
+                # Check post_data first (contains raw scraped data), then direct fields
+                post_data = first_post.get('post_data', {})
+                
+                # DEBUG: Print what we have in the data
+                print(f"🔍 [TWITTER DEBUG] First post keys: {list(first_post.keys())}")
+                print(f"🔍 [TWITTER DEBUG] Post_data keys: {list(post_data.keys())}")
+                print(f"🔍 [TWITTER DEBUG] author_name from post_data: {post_data.get('author_name')}")
+                print(f"🔍 [TWITTER DEBUG] author_name from first_post: {first_post.get('author_name')}")
+                
+                # Try to extract author name from the data
+                potential_name = (
+                    post_data.get('author_name') or
+                    post_data.get('user_name') or
+                    post_data.get('display_name') or
+                    post_data.get('full_name') or
+                    first_post.get('author_name') or 
+                    first_post.get('user_name') or 
+                    first_post.get('profile_name') or
+                    first_post.get('display_name') or
+                    first_post.get('full_name') or
+                    None
+                )
+                
+                if potential_name and potential_name.strip():
+                    scraped_full_name = potential_name
+        
+        # Always try fallback if we don't have a name yet
+        if scraped_full_name == "User" and twitter_username and twitter_username.strip():
+            scraped_full_name = twitter_username.replace('_', ' ').replace('-', ' ').title()
+        
+        print(f"🔍 [TWITTER DEBUG] Final scraped_full_name: {scraped_full_name}")
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("X", twitter_username)
+        results['twitter_profile'] = {
+            'username': twitter_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
+        cache.set(f'twitter_profile_{user_id}', results['twitter_profile'], 3600)
+        print(f"🔍 [TWITTER DEBUG] Cached profile: {results['twitter_profile']}")
+    
+    # Process Facebook results and generate profile
+    if facebook_username:
+        # Extract full name from scraped Facebook data (first post)
+        scraped_full_name = "User"
+        
+        # Try to get author name from post data first
+        if 'facebook' in results and isinstance(results.get('facebook'), list) and len(results['facebook']) > 0:
+            first_post = results['facebook'][0]
+            if isinstance(first_post, dict):
+                # Check post_data first (contains raw scraped data), then direct fields
+                post_data = first_post.get('post_data', {})
+                
+                # DEBUG: Print what we have in the data
+                print(f"🔍 [FACEBOOK DEBUG] First post keys: {list(first_post.keys())}")
+                print(f"🔍 [FACEBOOK DEBUG] Post_data keys: {list(post_data.keys())}")
+                print(f"🔍 [FACEBOOK DEBUG] author_name from post_data: {post_data.get('author_name')}")
+                print(f"🔍 [FACEBOOK DEBUG] author_name from first_post: {first_post.get('author_name')}")
+                
+                # Try to extract author name from the data
+                potential_name = (
+                    post_data.get('author_name') or
+                    post_data.get('user_name') or
+                    post_data.get('display_name') or
+                    post_data.get('full_name') or
+                    post_data.get('profile_name') or
+                    post_data.get('page_name') or
+                    post_data.get('pageName') or
+                    first_post.get('author_name') or 
+                    first_post.get('user_name') or 
+                    first_post.get('profile_name') or
+                    first_post.get('display_name') or
+                    first_post.get('full_name') or
+                    None
+                )
+                
+                if potential_name and potential_name.strip():
+                    scraped_full_name = potential_name
+        
+        # Always try fallback if we don't have a name yet
+        if scraped_full_name == "User" and facebook_username and facebook_username.strip():
+            scraped_full_name = facebook_username.replace('_', ' ').replace('-', ' ').title()
+        
+        print(f"🔍 [FACEBOOK DEBUG] Final scraped_full_name: {scraped_full_name}")
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("Facebook", facebook_username)
+        results['facebook_profile'] = {
+            'username': facebook_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
+        cache.set(f'facebook_profile_{user_id}', results['facebook_profile'], 3600)
+        print(f"🔍 [FACEBOOK DEBUG] Cached profile: {results['facebook_profile']}")
+    
+    # Process LinkedIn results and generate profile
+    if linkedin_username:
+        # Extract full name from scraped LinkedIn data (first post)
+        scraped_full_name = "User"
+        
+        # Try to get author name from post data first
+        if 'linkedin' in results:
+            # LinkedIn data might be in different format (dict with 'linkedin' key or list)
+            linkedin_data = results.get('linkedin')
+            linkedin_posts = []
+            
+            if isinstance(linkedin_data, dict) and 'linkedin' in linkedin_data:
+                linkedin_posts = linkedin_data['linkedin']
+            elif isinstance(linkedin_data, list):
+                linkedin_posts = linkedin_data
+                
+            if linkedin_posts and len(linkedin_posts) > 0:
+                first_post = linkedin_posts[0]
+                if isinstance(first_post, dict):
+                    # Check post_data first (contains raw scraped data), then direct fields
+                    post_data = first_post.get('post_data', {})
+                    
+                    # DEBUG: Print what we have in the data
+                    print(f"🔍 [LINKEDIN DEBUG] First post keys: {list(first_post.keys())}")
+                    print(f"🔍 [LINKEDIN DEBUG] Post_data keys: {list(post_data.keys())}")
+                    print(f"🔍 [LINKEDIN DEBUG] author_name from post_data: {post_data.get('author_name')}")
+                    print(f"🔍 [LINKEDIN DEBUG] author_name from first_post: {first_post.get('author_name')}")
+                    
+                    # Try to extract author name from the data
+                    potential_name = (
+                        post_data.get('author_name') or
+                        post_data.get('user_name') or
+                        post_data.get('display_name') or
+                        post_data.get('full_name') or
+                        post_data.get('profile_name') or
+                        post_data.get('page_name') or
+                        post_data.get('pageName') or
+                        first_post.get('author_name') or 
+                        first_post.get('user_name') or 
+                        first_post.get('profile_name') or
+                        first_post.get('display_name') or
+                        first_post.get('full_name') or
+                        None
+                    )
+                    
+                    if potential_name and isinstance(potential_name, str) and potential_name.strip():
+                        scraped_full_name = potential_name
+        
+        # Always try fallback if we don't have a name yet
+        if scraped_full_name == "User" and linkedin_username and linkedin_username.strip():
+            scraped_full_name = linkedin_username.replace('_', ' ').replace('-', ' ').title()
+        
+        print(f"🔍 [LINKEDIN DEBUG] Final scraped_full_name: {scraped_full_name}")
+        
+        # Generate profile assessment (username only)
+        profile_assessment = generate_profile_assessment("LinkedIn", linkedin_username)
+        results['linkedin_profile'] = {
+            'username': linkedin_username,
+            'full_name': scraped_full_name,
+            'assessment': profile_assessment
+        }
+        cache.set(f'linkedin_profile_{user_id}', results['linkedin_profile'], 3600)
+        print(f"🔍 [LINKEDIN DEBUG] Cached profile: {results['linkedin_profile']}")
+    
+    # Cache all results (temporary fast access)
+    print(f"📦 Caching results to cache:")
+    print(f"   Results keys: {list(results.keys())}")
+    
+    if 'instagram' in results:
+        data = results.get('instagram', [])
+        print(f"   ✅ Caching Instagram: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'instagram_analysis_{user_id}', data, 3600)
+    
+    if 'twitter' in results:
+        data = results.get('twitter', [])
+        print(f"   ✅ Caching Twitter: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'twitter_analysis_{user_id}', data, 3600)
+    
+    if 'linkedin' in results:
+        data = results.get('linkedin', [])
+        print(f"   ✅ Caching LinkedIn: {len(data) if isinstance(data, list) else type(data).__name__} - Data: {data if not isinstance(data, list) else f'{len(data)} posts'}")
+        cache.set(f'linkedin_analysis_{user_id}', data, 3600)
+    
+    if 'facebook' in results:
+        data = results.get('facebook', [])
+        print(f"   ✅ Caching Facebook: {len(data) if isinstance(data, list) else type(data).__name__} - Data: {data if not isinstance(data, list) else f'{len(data)} posts'}")
+        cache.set(f'facebook_analysis_{user_id}', data, 3600)
+    
+    # Verify cache was set
+    print(f"🔍 Verifying cache after save:")
+    print(f"   Instagram cache: {type(cache.get(f'instagram_analysis_{user_id}')).__name__}")
+    print(f"   Twitter cache: {type(cache.get(f'twitter_analysis_{user_id}')).__name__}")
+    print(f"   LinkedIn cache: {type(cache.get(f'linkedin_analysis_{user_id}')).__name__}")
+    print(f"   Facebook cache: {type(cache.get(f'facebook_analysis_{user_id}')).__name__}")
+    
+    # Persist results to database for permanent storage
+    # Instagram - Process with detailed progress stages
+    import time
+    try:

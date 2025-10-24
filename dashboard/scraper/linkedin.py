@@ -88,38 +88,13 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
         import time
         start_time = time.time()
         
-        # Start actor without waiting - check status immediately
-        run = apify_client.actor("apimaestro/linkedin-profile-posts").start(run_input=run_input)
-        run_id = run.get("id")
+        run = apify_client.actor("apimaestro/linkedin-profile-posts").call(
+            run_input=run_input,
+            timeout_secs=120,  # Allow up to 2 minutes for scraping
+            wait_secs=10       # Wait a bit longer for initial response
+        )
         
-        print(f"📡 Actor started with run ID: {run_id}")
-        
-        # Poll for status - check every second for fast failure detection
-        max_wait = 10  # Maximum 10 seconds to detect failures
-        check_interval = 1  # Check every second
-        
-        for i in range(max_wait):
-            time.sleep(check_interval)
-            run_info = apify_client.run(run_id).get()
-            run_status = run_info.get("status")
-            
-            print(f"⏱️  Check {i+1}/{max_wait}: Status = {run_status}")
-            
-            # FAST FAILURE: If actor failed, return immediately
-            if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
-                elapsed_time = time.time() - start_time
-                print(f"❌ LinkedIn scraper FAILED for @{username} in {elapsed_time:.1f}s")
-                print(f"   Status: {run_status} - Account may be private/suspended/nonexistent")
-                return []  # Return empty immediately
-            
-            # If succeeded, break and continue to scraping
-            if run_status == "SUCCEEDED":
-                break
-        
-        # Wait for actor to finish (only if not failed)
-        run = apify_client.run(run_id).wait_for_finish(timeout_secs=50)
         elapsed_time = time.time() - start_time
-        
         if elapsed_time > 100:  # If too slow, return timeout error
             print(f"⏰ LinkedIn actor took too long ({elapsed_time:.1f}s)")
             return None, [{
@@ -178,8 +153,6 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
             if item.get("author"):
                 print(f"🔍 [LINKEDIN APIFY DEBUG] Author object: {item.get('author')}")
         
-        # Author name extraction removed - no longer needed
-        
         if post_text:
             posts.append({
                 "post_text": post_text,
@@ -187,7 +160,6 @@ def get_linkedin_posts(username="syedawaisalishah", page_number=1, limit=10):
                 "timestamp": item.get("timestamp") or item.get("created_at") or item.get("date"),
                 "reactions": item.get("reactions") or item.get("likes") or 0,
                 "comments": item.get("comments") or item.get("commentsCount") or 0,
-                "author_name": author_name,
             })
             post_count += 1
             print(f"   ✓ Collected post {post_count}/{limit} (URL: {'✓' if post_url else '✗'})")
