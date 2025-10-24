@@ -172,8 +172,15 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         for future in as_completed(futures):
             try:
                 platform_name, platform_result = future.result()
+                
+                # CHECK IF RESULT IS VALID (not empty, not error)
+                if platform_result is None or (isinstance(platform_result, list) and len(platform_result) == 0):
+                    print(f"❌ {platform_name.title()} returned NO DATA - account may be private/fake/nonexistent")
+                    # Don't add to results - this platform failed
+                    continue
+                
                 results[platform_name] = platform_result
-                print(f"✅ {platform_name.title()} analysis completed")
+                print(f"✅ {platform_name.title()} analysis completed with {len(platform_result) if isinstance(platform_result, list) else 'data'}")
             except Exception as e:
                 print(f"❌ Platform analysis error: {e}")
                 import traceback
@@ -182,8 +189,41 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     elapsed = time.time() - start_time
     print(f"⏱️  Parallel analysis completed in {elapsed:.2f} seconds")
     
-    # Process Instagram results and generate profile
-    if instagram_username and 'instagram' in results:
+    # CHECK: If NO platforms returned valid data, mark analysis as FAILED
+    if not results or all(not v for v in results.values()):
+        print(f"❌ ALL PLATFORMS FAILED - No valid accounts found")
+        cache.set(f'analysis_stage_{user_id}', 'failed', timeout=60*60)
+        cache.set(f'analysis_error_{user_id}', 'All connected accounts are private, invalid, or returned no data.', timeout=60*60)
+        return
+    
+    # Skip all profile generation - just cache analysis results directly
+    print(f"📦 Caching results to cache (skipping profile generation):")
+    print(f"   Results keys: {list(results.keys())}")
+    
+    if 'instagram' in results:
+        data = results.get('instagram', [])
+        print(f"   ✅ Caching Instagram: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'instagram_analysis_{user_id}', data, 3600)
+    
+    if 'twitter' in results:
+        data = results.get('twitter', [])
+        print(f"   ✅ Caching Twitter: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'twitter_analysis_{user_id}', data, 3600)
+    
+    if 'linkedin' in results:
+        data = results.get('linkedin', [])
+        print(f"   ✅ Caching LinkedIn: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'linkedin_analysis_{user_id}', data, 3600)
+    
+    if 'facebook' in results:
+        data = results.get('facebook', [])
+        print(f"   ✅ Caching Facebook: {len(data) if isinstance(data, list) else type(data).__name__}")
+        cache.set(f'facebook_analysis_{user_id}', data, 3600)
+    
+    print(f"✅ All results cached successfully")
+    print(f"\n✅ Background analysis completed for user {user_id}\n")
+    # Profile generation removed - no longer needed
+    # All profile generation code has been removed
         # Extract full name from scraped Instagram data (first post)
         scraped_full_name = "User"
         if isinstance(results.get('instagram'), list) and len(results['instagram']) > 0:
@@ -270,7 +310,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
         print(f"🔍 [TWITTER DEBUG] Cached profile: {results['twitter_profile']}")
     
     # Process Facebook results and generate profile
-    if facebook_username:
+        if facebook_username:
         # Extract full name from scraped Facebook data (first post)
         scraped_full_name = "User"
         
@@ -368,7 +408,7 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
                         None
                     )
                     
-                    if potential_name and potential_name.strip():
+                    if potential_name and isinstance(potential_name, str) and potential_name.strip():
                         scraped_full_name = potential_name
         
         # Always try fallback if we don't have a name yet
@@ -419,74 +459,6 @@ def analyze_all_platforms(user_id, instagram_username, linkedin_username, twitte
     print(f"   Facebook cache: {type(cache.get(f'facebook_analysis_{user_id}')).__name__}")
     
     # Persist results to database for permanent storage
+    # Instagram - Process with detailed progress stages
+    import time
     try:
-        from .models import AnalysisResult
-        from django.contrib.auth.models import User
-        from django.utils import timezone
-        
-        user = User.objects.get(id=user_id)
-        
-        # Save each platform's results to the database
-        for platform in ['instagram', 'twitter', 'linkedin', 'facebook']:
-            if platform in results and results[platform]:
-                platform_data = results[platform]
-                profile_data = results.get(f'{platform}_profile', {})
-                
-                # Skip if it's an error string
-                if isinstance(platform_data, str):
-                    continue
-                
-                # Calculate overall risk score for this platform
-                risk_scores = []
-                if isinstance(platform_data, list):
-                    for post in platform_data:
-                        if isinstance(post, dict):
-                            # Try different data structures
-                            score = None
-                            if 'analysis' in post and platform.title() in post['analysis']:
-                                score = post['analysis'][platform.title()].get('risk_score')
-                            elif platform.title() in post:
-                                score = post[platform.title()].get('risk_score')
-                            else:
-                                score = post.get('risk_score')
-                            
-                            if score is not None and isinstance(score, (int, float)) and score >= 0:
-                                risk_scores.append(score)
-                
-                avg_risk = sum(risk_scores) / len(risk_scores) if risk_scores else None
-                
-                # Create or update AnalysisResult
-                AnalysisResult.objects.update_or_create(
-                    user=user,
-                    platform=platform,
-                    analyzed_at__date=timezone.now().date(),  # One result per platform per day
-                    defaults={
-                        'posts_data': platform_data if isinstance(platform_data, list) else [],
-                        'analysis_data': {'results': platform_data},
-                        'profile_data': profile_data,
-                        'payment_completed': False,
-                        'post_count': len(platform_data) if isinstance(platform_data, list) else 0,
-                        'overall_risk_score': int(avg_risk) if avg_risk is not None else None,
-                    }
-                )
-        
-        print(f"✅ Analysis results persisted to database for user {user_id}")
-    except Exception as e:
-        print(f"⚠️  Failed to persist results to database (non-critical): {e}")
-        import traceback
-        traceback.print_exc()
-        # Don't fail the analysis if DB persistence fails
-    
-    # Set completion stage
-    cache.set(f'analysis_stage_{user_id}', 'complete', timeout=60*60)
-    cache.set(f'stage_progress_{user_id}', 100, timeout=60*60)
-
-    return results
-
-
-# ==== RUN SCRIPT ====
-if __name__ == "__main__":
-    analysis = analyze_instagram_post(INSTAGRAM_USERNAME)
-    if analysis:
-        print(json.dumps(analysis, indent=2))
-

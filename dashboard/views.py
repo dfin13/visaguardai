@@ -199,6 +199,17 @@ def check_analysis_progress(request):
         # Check for detailed progress stages
         current_stage = cache.get(f'analysis_stage_{request.user.id}', 'starting')
         stage_progress = cache.get(f'stage_progress_{request.user.id}', 0)
+        
+        # CHECK FOR FAILED ANALYSIS
+        if current_stage == 'failed':
+            analysis_error = cache.get(f'analysis_error_{request.user.id}', 'Analysis failed - no valid accounts found.')
+            cache.delete(f'analysis_stage_{request.user.id}')
+            cache.delete(f'analysis_error_{request.user.id}')
+            return JsonResponse({
+                'status': 'failed',
+                'message': analysis_error,
+                'progress': 0
+            })
 
         instagram_done = (not instagram_username) or (instagram_result is not None)
         linkedin_done = (not linkedin_username) or (linkedin_result is not None)
@@ -486,75 +497,7 @@ def start_analysis(request):
         if not instagram_username and not linkedin_username and not twitter_username and not facebook_username:
             return JsonResponse({'success': False, 'error': 'Please connect at least one social account before starting analysis.'})
 
-        # VALIDATE ACCOUNTS BEFORE STARTING ANALYSIS
-        import sys
-        sys.stderr.write(f"\n{'='*80}\n")
-        sys.stderr.write(f"🔍 VALIDATING CONNECTED ACCOUNTS BEFORE ANALYSIS...\n")
-        sys.stderr.write(f"   Instagram: {instagram_username}\n")
-        sys.stderr.write(f"   LinkedIn: {linkedin_username}\n")
-        sys.stderr.write(f"   Twitter: {twitter_username}\n")
-        sys.stderr.write(f"   Facebook: {facebook_username}\n")
-        sys.stderr.write(f"{'='*80}\n")
-        sys.stderr.flush()
-        
-        from .validators import validate_all_accounts
-        
-        try:
-            all_valid, validation_results = validate_all_accounts(
-                instagram_username=instagram_username,
-                linkedin_username=linkedin_username,
-                twitter_username=twitter_username,
-                facebook_username=facebook_username
-            )
-            
-            sys.stderr.write(f"📊 VALIDATION COMPLETE: all_valid={all_valid}\n")
-            sys.stderr.write(f"   Detailed results: {validation_results}\n")
-            sys.stderr.flush()
-            
-            # Check if ANY account is valid
-            if not all_valid:
-                # Build detailed error message
-                invalid_accounts = []
-                for platform, result in validation_results.items():
-                    if not result.get('valid', False):
-                        account_name = {
-                            'instagram': instagram_username,
-                            'linkedin': linkedin_username,
-                            'twitter': twitter_username,
-                            'facebook': facebook_username
-                        }.get(platform, 'unknown')
-                        
-                        error_msg = result.get('message', 'Account validation failed')
-                        invalid_accounts.append(f"{platform.title()}: {error_msg}")
-                
-                if invalid_accounts:
-                    error_message = "Unable to analyze the following accounts:\\n" + "\\n".join(invalid_accounts)
-                    sys.stderr.write(f"❌ VALIDATION FAILED - BLOCKING ANALYSIS: {error_message}\n")
-                    sys.stderr.flush()
-                    return JsonResponse({
-                        'success': False,
-                        'error': error_message,
-                        'validation_failed': True
-                    }, status=400)
-                else:
-                    sys.stderr.write(f"⚠️ All accounts invalid but no invalid_accounts list - this shouldn't happen\n")
-                    sys.stderr.flush()
-            else:
-                sys.stderr.write(f"✅ ALL ACCOUNTS VALIDATED - PROCEEDING WITH ANALYSIS\n")
-                sys.stderr.flush()
-        
-        except Exception as validation_error:
-            sys.stderr.write(f"⚠️ VALIDATION ERROR: {validation_error}\n")
-            sys.stderr.flush()
-            import traceback
-            traceback.print_exc()
-            # DON'T continue with analysis if validation fails - return error
-            return JsonResponse({
-                'success': False,
-                'error': 'Account validation service temporarily unavailable. Please try again.',
-                'validation_failed': True
-            }, status=500)
-
+        # Validation happens during scraping - no pre-validation needed
         # Reset payment status for new analysis (pay-per-analysis model)
         request.session['current_analysis_paid'] = False
         
@@ -1266,35 +1209,7 @@ def connect_social_account(request):
         if not username:
             return JsonResponse({'success': False, 'message': 'Username is required'})
         
-        # VALIDATE ACCOUNT BEFORE SAVING
-        print(f"🔍 Validating {platform} account @{username} before connecting...")
-        from .validators import (
-            validate_instagram_account,
-            validate_linkedin_account,
-            validate_twitter_account,
-            validate_facebook_account
-        )
-        
-        # Choose validator based on platform
-        validator_map = {
-            'instagram': validate_instagram_account,
-            'linkedin': validate_linkedin_account,
-            'twitter': validate_twitter_account,
-            'facebook': validate_facebook_account
-        }
-        
-        validator = validator_map.get(platform)
-        if validator:
-            is_valid, message = validator(username)
-            if not is_valid:
-                print(f"❌ Validation failed for {platform} @{username}: {message}")
-                return JsonResponse({
-                    'success': False,
-                    'message': f"This account doesn't exist or is private.",
-                    'validation_failed': True
-                })
-            print(f"✅ Validation passed for {platform} @{username}")
-        
+        # Save directly - validation happens during analysis
         # All platforms now use database storage
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, username)
