@@ -486,6 +486,53 @@ def start_analysis(request):
         if not instagram_username and not linkedin_username and not twitter_username and not facebook_username:
             return JsonResponse({'success': False, 'error': 'Please connect at least one social account before starting analysis.'})
 
+        # VALIDATE ACCOUNTS BEFORE STARTING ANALYSIS
+        print(f"🔍 Validating connected accounts before analysis...")
+        from .validators import validate_all_accounts
+        
+        try:
+            all_valid, validation_results = validate_all_accounts(
+                instagram_username=instagram_username,
+                linkedin_username=linkedin_username,
+                twitter_username=twitter_username,
+                facebook_username=facebook_username
+            )
+            
+            print(f"📊 Validation complete: all_valid={all_valid}")
+            print(f"   Results: {validation_results}")
+            
+            # Check if ANY account is valid
+            if not all_valid:
+                # Build detailed error message
+                invalid_accounts = []
+                for platform, result in validation_results.items():
+                    if not result.get('valid', False):
+                        account_name = {
+                            'instagram': instagram_username,
+                            'linkedin': linkedin_username,
+                            'twitter': twitter_username,
+                            'facebook': facebook_username
+                        }.get(platform, 'unknown')
+                        
+                        error_msg = result.get('message', 'Account validation failed')
+                        invalid_accounts.append(f"{platform.title()}: {error_msg}")
+                
+                if invalid_accounts:
+                    error_message = "Unable to analyze the following accounts:\\n" + "\\n".join(invalid_accounts)
+                    print(f"❌ Validation failed: {error_message}")
+                    return JsonResponse({
+                        'success': False,
+                        'error': error_message,
+                        'validation_failed': True
+                    }, status=400)
+        
+        except Exception as validation_error:
+            print(f"⚠️ Validation error: {validation_error}")
+            # Continue with analysis even if validation fails (graceful degradation)
+            # But log the error for debugging
+            import traceback
+            traceback.print_exc()
+
         # Reset payment status for new analysis (pay-per-analysis model)
         request.session['current_analysis_paid'] = False
         
