@@ -76,38 +76,13 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
         import time
         start_time = time.time()
         
-        # Start actor without waiting - check status immediately
-        run = apify_client.actor("apify/facebook-posts-scraper").start(run_input=run_input)
-        run_id = run.get("id")
+        run = apify_client.actor("apify/facebook-posts-scraper").call(
+            run_input=run_input,
+            timeout_secs=120,  # Allow up to 2 minutes for scraping
+            wait_secs=10       # Wait a bit longer for initial response
+        )
         
-        print(f"📡 Actor started with run ID: {run_id}")
-        
-        # Poll for status - check every second for fast failure detection
-        max_wait = 10  # Maximum 10 seconds to detect failures
-        check_interval = 1  # Check every second
-        
-        for i in range(max_wait):
-            time.sleep(check_interval)
-            run_info = apify_client.run(run_id).get()
-            run_status = run_info.get("status")
-            
-            print(f"⏱️  Check {i+1}/{max_wait}: Status = {run_status}")
-            
-            # FAST FAILURE: If actor failed, return immediately
-            if run_status in ["FAILED", "ABORTED", "TIMED-OUT"]:
-                elapsed_time = time.time() - start_time
-                print(f"❌ Facebook scraper FAILED for {username_or_url} in {elapsed_time:.1f}s")
-                print(f"   Status: {run_status} - Account may be private/suspended/nonexistent")
-                return []  # Return empty immediately
-            
-            # If succeeded, break and continue to scraping
-            if run_status == "SUCCEEDED":
-                break
-        
-        # Wait for actor to finish (only if not failed)
-        run = apify_client.run(run_id).wait_for_finish(timeout_secs=50)
         elapsed_time = time.time() - start_time
-        
         if elapsed_time > 100:  # If too slow, return timeout error
             print(f"⏰ Facebook actor took too long ({elapsed_time:.1f}s)")
             return [{
@@ -178,7 +153,14 @@ def analyze_facebook_posts(username_or_url, limit=10, user_id=None):
                     if item.get("author"):
                         print(f"🔍 [FACEBOOK APIFY DEBUG] Author object: {item.get('author')}")
                 
-                # Author name extraction removed - no longer needed
+                # Extract author name from item data
+                author_name = (
+                    item.get("pageName") or 
+                    item.get("user") or 
+                    item.get("author", {}).get("name") if isinstance(item.get("author"), dict) else None or
+                    username_or_url.split('/')[-1]  # Fallback to username
+                )
+                print(f"🔍 [FACEBOOK APIFY DEBUG] Extracted author_name: {author_name}")
                 
                 posts.append({
                     'text': post_text,

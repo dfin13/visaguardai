@@ -199,17 +199,6 @@ def check_analysis_progress(request):
         # Check for detailed progress stages
         current_stage = cache.get(f'analysis_stage_{request.user.id}', 'starting')
         stage_progress = cache.get(f'stage_progress_{request.user.id}', 0)
-        
-        # CHECK FOR FAILED ANALYSIS
-        if current_stage == 'failed':
-            analysis_error = cache.get(f'analysis_error_{request.user.id}', 'Analysis failed - no valid accounts found.')
-            cache.delete(f'analysis_stage_{request.user.id}')
-            cache.delete(f'analysis_error_{request.user.id}')
-            return JsonResponse({
-                'status': 'failed',
-                'message': analysis_error,
-                'progress': 0
-            })
 
         instagram_done = (not instagram_username) or (instagram_result is not None)
         linkedin_done = (not linkedin_username) or (linkedin_result is not None)
@@ -497,7 +486,6 @@ def start_analysis(request):
         if not instagram_username and not linkedin_username and not twitter_username and not facebook_username:
             return JsonResponse({'success': False, 'error': 'Please connect at least one social account before starting analysis.'})
 
-        # Validation happens during scraping - no pre-validation needed
         # Reset payment status for new analysis (pay-per-analysis model)
         request.session['current_analysis_paid'] = False
         
@@ -1209,7 +1197,6 @@ def connect_social_account(request):
         if not username:
             return JsonResponse({'success': False, 'message': 'Username is required'})
         
-        # Save directly - validation happens during analysis
         # All platforms now use database storage
         user_profile = UserProfile.objects.get(user=request.user)
         setattr(user_profile, platform, username)
@@ -1222,9 +1209,6 @@ def connect_social_account(request):
     except UserProfile.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Profile not found'})
     except Exception as e:
-        print(f"❌ Error connecting {platform} account: {e}")
-        import traceback
-        traceback.print_exc()
         return JsonResponse({'success': False, 'message': str(e)})
 @login_required
 def result_view(request):
