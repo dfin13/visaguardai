@@ -5,7 +5,7 @@ from django.utils import timezone
 # Create your models here.
 class UserProfile(models.Model):
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
-    username = models.CharField(max_length=150, )
+    username = models.CharField(max_length=150, blank=True, default='')
     tiktok = models.CharField(blank=True, null=True, max_length=150)
     instagram = models.CharField(blank=True, null=True, max_length=150)
     linkedin = models.CharField(blank=True, null=True, max_length=150)

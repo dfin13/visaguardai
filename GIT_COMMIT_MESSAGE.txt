@@ -1,0 +1,55 @@
+Fix: Critical email/password signup 500 error - UserProfile.username constraint
+
+ISSUE:
+- Email/password signups failing with HTTP 500 errors
+- Google OAuth signups working correctly
+- Production users unable to create accounts via email
+
+ROOT CAUSE:
+- UserProfile.username field was NOT NULL with no default value
+- When User.objects.create_user() created a user, the post_save signal
+  tried to create UserProfile but failed with IntegrityError
+- Signal handlers had duplicate code and a bug referencing undefined 'instance'
+
+FIXES:
+1. dashboard/models.py
+   - Changed username field to: CharField(max_length=150, blank=True, default='')
+   - Now allows blank values, preventing IntegrityError
+
+2. dashboard/signals.py
+   - Removed duplicate signal handler functions
+   - Fixed undefined variable bug on line 55
+   - Added comprehensive error handling with try-except blocks
+   - Better logging for debugging future issues
+
+3. dashboard/migrations/0024_alter_userprofile_username.py
+   - New migration to alter username field schema
+   - Allows blank=True and sets default=''
+
+TESTING:
+- Created test_signup_fix_local.py to verify fix works
+- Created deploy_signup_fix.sh for easy production deployment
+- Created verify_signup_fix.sh to verify deployment success
+
+DEPLOYMENT INSTRUCTIONS:
+1. Push this commit to main branch
+2. SSH to production server
+3. Run: ./deploy_signup_fix.sh
+4. Test signup at /auth/signup/
+5. Run: ./verify_signup_fix.sh
+
+FILES CHANGED:
+- dashboard/models.py
+- dashboard/signals.py
+- dashboard/migrations/0024_alter_userprofile_username.py (new)
+- deploy_signup_fix.sh (new)
+- check_production_logs.sh (new)
+- test_signup_fix_local.py (new)
+- verify_signup_fix.sh (new)
+- SIGNUP_FIX_REPORT.md (new)
+- URGENT_SIGNUP_FIX_README.md (new)
+
+Priority: CRITICAL
+Affects: All new user signups via email/password
+Impact: High - Users cannot create accounts
+
